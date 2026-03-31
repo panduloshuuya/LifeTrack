@@ -1,0 +1,56 @@
+{
+  "entities": {
+    "UserData": {
+      "title": "User Task Data",
+      "description": "Stores habits, weekly schedule, and reset information for a specific user (Grace or Tanga).",
+      "type": "object",
+      "properties": {
+        "habits": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "name": { "type": "string" },
+              "completed": { "type": "object" }
+            }
+          }
+        },
+        "weeklySchedule": {
+          "type": "object",
+          "description": "Map of days to their classes and tasks."
+        },
+        "lastResetDate": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["habits", "weeklySchedule", "lastResetDate"]
+    },
+    "PeriodData": {
+      "title": "Period Tracker Data",
+      "description": "Stores the start and end dates of the period and cycle length.",
+      "type": "object",
+      "properties": {
+        "startDate": { "type": "string", "format": "date-time" },
+        "endDate": { "type": "string", "format": "date-time" },
+        "cycleLength": { "type": "integer" }
+      },
+      "required": ["cycleLength"]
+    }
+  },
+  "firestore": {
+    "/trackers/grace": {
+      "schema": "UserData",
+      "description": "Grace's task tracker data."
+    },
+    "/trackers/tanga": {
+      "schema": "UserData",
+      "description": "Tanga's task tracker data."
+    },
+    "/trackers/period": {
+      "schema": "PeriodData",
+      "description": "The shared period tracker data."
+    }
+  }
+}
