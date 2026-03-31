@@ -167,16 +167,16 @@ function Dashboard({
   const phaseInfo = getPhaseInfo();
 
   return (
-    <div className={`h-full w-full p-6 overflow-y-auto transition-colors duration-300 ${isDarkMode ? 'bg-gray-900' : 'bg-gray-50'}`}>
-      <div className="max-w-6xl mx-auto space-y-6">
-        <header className="flex items-center justify-between">
+    <div className={`h-full w-full p-4 md:p-6 overflow-y-auto transition-colors duration-300 ${isDarkMode ? 'bg-gray-900' : 'bg-gray-50'}`}>
+      <div className="max-w-6xl mx-auto space-y-4 md:space-y-6 pb-24 md:pb-0">
+        <header className="flex flex-col md:flex-row md:items-center justify-between gap-2 md:gap-4">
           <div>
-            <h2 className={`text-4xl font-black uppercase tracking-tighter leading-none ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>LifeTrack Hub</h2>
-            <p className={`font-medium italic mt-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>"Doing all we can in love and support of one another."</p>
+            <h2 className={`text-2xl md:text-4xl font-black uppercase tracking-tighter leading-none ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>LifeTrack Hub</h2>
+            <p className={`text-[10px] md:text-base font-medium italic mt-0.5 md:mt-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>"Doing all we can in love and support of one another."</p>
           </div>
-          <div className="text-right">
-            <p className="text-xs font-black text-purple-500 uppercase tracking-widest">{format(today, 'EEEE')}</p>
-            <p className={`text-lg font-bold ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>{format(today, 'MMMM d')}</p>
+          <div className="flex md:block items-center justify-between bg-purple-500/10 md:bg-transparent p-2 md:p-0 rounded-xl">
+            <p className="text-[10px] font-black text-purple-500 uppercase tracking-widest">{format(today, 'EEEE')}</p>
+            <p className={`text-sm md:text-lg font-bold ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>{format(today, 'MMMM d')}</p>
           </div>
         </header>
 
@@ -184,32 +184,32 @@ function Dashboard({
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-gradient-to-br from-purple-600 to-indigo-700 p-6 rounded-[2.5rem] text-white shadow-2xl shadow-purple-200 relative overflow-hidden"
+          className="bg-gradient-to-br from-purple-600 to-indigo-700 p-4 md:p-6 rounded-3xl md:rounded-[2.5rem] text-white shadow-xl shadow-purple-200/20 relative overflow-hidden"
         >
-          <div className="absolute top-0 right-0 p-8 opacity-10">
+          <div className="absolute top-0 right-0 p-8 opacity-10 hidden md:block">
             <Droplets size={120} />
           </div>
           
-          <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-            <div className="flex items-center gap-4">
-              <div className="p-4 bg-white/20 rounded-2xl backdrop-blur-md">
-                <Droplets size={32} />
+          <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-3 md:gap-6">
+            <div className="flex items-center gap-3 md:gap-4">
+              <div className="p-2 md:p-4 bg-white/20 rounded-xl md:rounded-2xl backdrop-blur-md">
+                <Droplets size={20} className="md:w-8 md:h-8" />
               </div>
               <div>
-                <p className="text-purple-200 text-xs font-bold uppercase tracking-widest">Current Phase</p>
-                <h3 className="text-3xl font-black uppercase tracking-tight">{phaseInfo.name}</h3>
+                <p className="text-purple-200 text-[8px] md:text-[10px] font-bold uppercase tracking-widest">Current Phase</p>
+                <h3 className="text-xl md:text-3xl font-black uppercase tracking-tight">{phaseInfo.name}</h3>
               </div>
             </div>
             
-            <div className="flex-1 max-w-md bg-white/10 p-4 rounded-2xl backdrop-blur-sm border border-white/10">
-              <p className="text-[10px] font-bold text-purple-200 uppercase tracking-widest mb-1">Daily Insight</p>
-              <p className="text-sm font-medium leading-relaxed">"{phaseInfo.advice}"</p>
+            <div className="flex-1 max-w-md bg-white/10 p-3 md:p-4 rounded-xl md:rounded-2xl backdrop-blur-sm border border-white/10">
+              <p className="text-[8px] md:text-[10px] font-bold text-purple-200 uppercase tracking-widest mb-0.5 md:mb-1">Daily Insight</p>
+              <p className="text-[11px] md:text-sm font-medium leading-tight md:leading-relaxed">"{phaseInfo.advice}"</p>
             </div>
 
-            <div className="flex gap-4">
+            <div className="flex gap-4 self-end md:self-auto">
               <div className="text-center">
-                <p className="text-[10px] font-bold text-purple-200 uppercase">Cycle Day</p>
-                <p className="text-2xl font-black">
+                <p className="text-[8px] md:text-[10px] font-bold text-purple-200 uppercase">Cycle Day</p>
+                <p className="text-lg md:text-2xl font-black">
                   {periodData.startDate ? (((differenceInDays(today, parseISO(periodData.startDate)) % 28) + 28) % 28) + 1 : '--'}
                 </p>
               </div>
@@ -218,29 +218,29 @@ function Dashboard({
         </motion.div>
 
         {/* Main Accountability Grid */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
           {/* Grace's Column */}
-          <div className="space-y-6">
+          <div className="space-y-4 md:space-y-6">
             <motion.div 
               whileHover={{ y: -5 }}
-              className={`p-6 rounded-[2rem] shadow-xl border transition-colors duration-300 ${isDarkMode ? 'bg-gray-800 border-gray-700 shadow-none' : 'bg-white border-pink-50 shadow-pink-100'}`}
+              className={`p-4 md:p-6 rounded-3xl md:rounded-[2rem] shadow-lg border transition-colors duration-300 ${isDarkMode ? 'bg-gray-800 border-gray-700 shadow-none' : 'bg-white border-pink-50 shadow-pink-100/50'}`}
             >
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center gap-3">
-                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${isDarkMode ? 'bg-pink-900/30' : 'bg-pink-100'}`}>
-                    <User className="text-pink-500" size={24} />
+              <div className="flex items-center justify-between mb-3 md:mb-6">
+                <div className="flex items-center gap-2 md:gap-3">
+                  <div className={`w-10 h-10 md:w-12 md:h-12 rounded-xl md:rounded-2xl flex items-center justify-center ${isDarkMode ? 'bg-pink-900/30' : 'bg-pink-100'}`}>
+                    <User className="text-pink-500 md:w-6 md:h-6" size={18} />
                   </div>
                   <div>
-                    <h3 className={`text-xl font-bold ${isDarkMode ? 'text-gray-100' : 'text-gray-800'}`}>Grace</h3>
+                    <h3 className={`text-base md:text-xl font-bold ${isDarkMode ? 'text-gray-100' : 'text-gray-800'}`}>Grace</h3>
                   </div>
                 </div>
                 <div className="text-right">
-                  <p className="text-2xl font-black text-pink-500 leading-none">{graceProgress}%</p>
-                  <p className="text-[10px] font-bold text-gray-400 uppercase">Weekly</p>
+                  <p className="text-lg md:text-2xl font-black text-pink-500 leading-none">{graceProgress}%</p>
+                  <p className="text-[8px] md:text-[10px] font-bold text-gray-400 uppercase">Weekly</p>
                 </div>
               </div>
 
-              <div className={`w-full h-2 rounded-full overflow-hidden mb-6 ${isDarkMode ? 'bg-gray-700' : 'bg-gray-100'}`}>
+              <div className={`w-full h-1.5 md:h-2 rounded-full overflow-hidden mb-4 md:mb-6 ${isDarkMode ? 'bg-gray-700' : 'bg-gray-100'}`}>
                 <motion.div 
                   initial={{ width: 0 }}
                   animate={{ width: `${graceProgress}%` }}
@@ -248,16 +248,16 @@ function Dashboard({
                 />
               </div>
 
-              <div className="space-y-4">
-                <h4 className={`text-[10px] font-black uppercase tracking-widest border-b pb-2 ${isDarkMode ? 'text-gray-500 border-gray-700' : 'text-gray-400 border-gray-100'}`}>Today's Focus</h4>
-                <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
+              <div className="space-y-3 md:space-y-4">
+                <h4 className={`text-[9px] md:text-[10px] font-black uppercase tracking-widest border-b pb-1 md:pb-2 ${isDarkMode ? 'text-gray-500 border-gray-700' : 'text-gray-400 border-gray-100'}`}>Today's Focus</h4>
+                <div className="space-y-2 max-h-40 md:max-h-48 overflow-y-auto pr-1 md:pr-2">
                   {graceData.weeklySchedule[dayName].tasks.length === 0 ? (
-                    <p className="text-xs text-gray-400 italic">No tasks set for today.</p>
+                    <p className="text-[10px] md:text-xs text-gray-400 italic">No tasks set for today.</p>
                   ) : (
                     graceData.weeklySchedule[dayName].tasks.map(t => (
                       <div key={t.id} className={`flex items-center gap-2 p-2 rounded-xl border transition-colors duration-300 ${isDarkMode ? 'bg-gray-900/50 border-gray-700' : 'bg-gray-50 border-gray-100'}`}>
-                        <div className={`w-2 h-2 rounded-full ${t.completed ? 'bg-pink-500' : 'bg-gray-300'}`} />
-                        <span className={`text-xs font-medium truncate ${t.completed ? 'line-through text-gray-500' : (isDarkMode ? 'text-gray-300' : 'text-gray-700')}`}>
+                        <div className={`w-1.5 h-1.5 md:w-2 md:h-2 rounded-full shrink-0 ${t.completed ? 'bg-pink-500' : 'bg-gray-300'}`} />
+                        <span className={`text-[10px] md:text-xs font-medium truncate ${t.completed ? 'line-through text-gray-500' : (isDarkMode ? 'text-gray-300' : 'text-gray-700')}`}>
                           {t.name}
                         </span>
                       </div>
@@ -269,27 +269,27 @@ function Dashboard({
           </div>
 
           {/* Tanga's Column */}
-          <div className="space-y-6">
+          <div className="space-y-4 md:space-y-6">
             <motion.div 
               whileHover={{ y: -5 }}
-              className={`p-6 rounded-[2rem] shadow-xl border transition-colors duration-300 ${isDarkMode ? 'bg-gray-800 border-gray-700 shadow-none' : 'bg-white border-blue-50 shadow-blue-100'}`}
+              className={`p-4 md:p-6 rounded-3xl md:rounded-[2rem] shadow-lg border transition-colors duration-300 ${isDarkMode ? 'bg-gray-800 border-gray-700 shadow-none' : 'bg-white border-blue-50 shadow-blue-100/50'}`}
             >
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center gap-3">
-                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${isDarkMode ? 'bg-blue-900/30' : 'bg-blue-100'}`}>
-                    <Users className="text-blue-500" size={24} />
+              <div className="flex items-center justify-between mb-3 md:mb-6">
+                <div className="flex items-center gap-2 md:gap-3">
+                  <div className={`w-10 h-10 md:w-12 md:h-12 rounded-xl md:rounded-2xl flex items-center justify-center ${isDarkMode ? 'bg-blue-900/30' : 'bg-blue-100'}`}>
+                    <Users className="text-blue-500 md:w-6 md:h-6" size={18} />
                   </div>
                   <div>
-                    <h3 className={`text-xl font-bold ${isDarkMode ? 'text-gray-100' : 'text-gray-800'}`}>Tanga</h3>
+                    <h3 className={`text-base md:text-xl font-bold ${isDarkMode ? 'text-gray-100' : 'text-gray-800'}`}>Tanga</h3>
                   </div>
                 </div>
                 <div className="text-right">
-                  <p className="text-2xl font-black text-blue-500 leading-none">{tangaProgress}%</p>
-                  <p className="text-[10px] font-bold text-gray-400 uppercase">Weekly</p>
+                  <p className="text-lg md:text-2xl font-black text-blue-500 leading-none">{tangaProgress}%</p>
+                  <p className="text-[8px] md:text-[10px] font-bold text-gray-400 uppercase">Weekly</p>
                 </div>
               </div>
 
-              <div className={`w-full h-2 rounded-full overflow-hidden mb-6 ${isDarkMode ? 'bg-gray-700' : 'bg-gray-100'}`}>
+              <div className={`w-full h-1.5 md:h-2 rounded-full overflow-hidden mb-4 md:mb-6 ${isDarkMode ? 'bg-gray-700' : 'bg-gray-100'}`}>
                 <motion.div 
                   initial={{ width: 0 }}
                   animate={{ width: `${tangaProgress}%` }}
@@ -297,16 +297,16 @@ function Dashboard({
                 />
               </div>
 
-              <div className="space-y-4">
-                <h4 className={`text-[10px] font-black uppercase tracking-widest border-b pb-2 ${isDarkMode ? 'text-gray-500 border-gray-700' : 'text-gray-400 border-gray-100'}`}>Today's Focus</h4>
-                <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
+              <div className="space-y-3 md:space-y-4">
+                <h4 className={`text-[9px] md:text-[10px] font-black uppercase tracking-widest border-b pb-1 md:pb-2 ${isDarkMode ? 'text-gray-500 border-gray-700' : 'text-gray-400 border-gray-100'}`}>Today's Focus</h4>
+                <div className="space-y-2 max-h-40 md:max-h-48 overflow-y-auto pr-1 md:pr-2">
                   {tangaData.weeklySchedule[dayName].tasks.length === 0 ? (
-                    <p className="text-xs text-gray-400 italic">No tasks set for today.</p>
+                    <p className="text-[10px] md:text-xs text-gray-400 italic">No tasks set for today.</p>
                   ) : (
                     tangaData.weeklySchedule[dayName].tasks.map(t => (
                       <div key={t.id} className={`flex items-center gap-2 p-2 rounded-xl border transition-colors duration-300 ${isDarkMode ? 'bg-gray-900/50 border-gray-700' : 'bg-gray-50 border-gray-100'}`}>
-                        <div className={`w-2 h-2 rounded-full ${t.completed ? 'bg-blue-500' : 'bg-gray-300'}`} />
-                        <span className={`text-xs font-medium truncate ${t.completed ? 'line-through text-gray-500' : (isDarkMode ? 'text-gray-300' : 'text-gray-700')}`}>
+                        <div className={`w-1.5 h-1.5 md:w-2 md:h-2 rounded-full shrink-0 ${t.completed ? 'bg-blue-500' : 'bg-gray-300'}`} />
+                        <span className={`text-[10px] md:text-xs font-medium truncate ${t.completed ? 'line-through text-gray-500' : (isDarkMode ? 'text-gray-300' : 'text-gray-700')}`}>
                           {t.name}
                         </span>
                       </div>
@@ -342,13 +342,12 @@ function AppContent() {
     }
   }, [isDarkMode]);
 
-  // Firestore Real-time Sync
+  // Firestore Real-time Sync - Public Access
   useEffect(() => {
     const unsubGrace = onSnapshot(doc(db, 'trackers', 'grace'), (snapshot) => {
       if (snapshot.exists()) {
         setGraceData(snapshot.data() as UserData);
       } else {
-        // Initialize if doesn't exist
         setDoc(doc(db, 'trackers', 'grace'), INITIAL_USER_DATA).catch(e => handleFirestoreError(e, OperationType.WRITE, 'trackers/grace'));
       }
     }, (e) => handleFirestoreError(e, OperationType.GET, 'trackers/grace'));
@@ -427,8 +426,8 @@ function AppContent() {
 
   return (
     <div className={`h-screen w-screen flex flex-col overflow-hidden transition-colors duration-300 ${isDarkMode ? 'bg-gray-900' : 'bg-gray-50'}`}>
-      {/* Navigation Bar */}
-      <nav className={`px-6 py-3 flex items-center justify-between shadow-sm z-50 transition-colors duration-300 ${isDarkMode ? 'bg-gray-800 border-b border-gray-700' : 'bg-white border-b border-gray-200'}`}>
+      {/* Navigation Bar - Desktop */}
+      <nav className={`hidden md:flex px-6 py-3 items-center justify-between shadow-sm z-50 transition-colors duration-300 ${isDarkMode ? 'bg-gray-800 border-b border-gray-700' : 'bg-white border-b border-gray-200'}`}>
         <div className="flex items-center gap-2">
           <div className={`p-2 rounded-lg ${isDarkMode ? 'bg-purple-900/50' : 'bg-purple-100'}`}>
             <Heart className="text-purple-500" size={20} />
@@ -491,6 +490,45 @@ function AppContent() {
             <p className={`text-sm font-bold ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>{format(new Date(), 'MMMM d, yyyy')}</p>
           </div>
         </div>
+      </nav>
+
+      {/* Bottom Navigation - Mobile */}
+      <nav className={`md:hidden fixed bottom-0 left-0 right-0 z-50 px-4 py-3 flex items-center justify-around shadow-[0_-4px_10px_rgba(0,0,0,0.05)] transition-colors duration-300 ${isDarkMode ? 'bg-gray-800 border-t border-gray-700' : 'bg-white border-t border-gray-200'}`}>
+        <button
+          onClick={() => setActivePage('dashboard')}
+          className={`flex flex-col items-center gap-1 transition-all ${activePage === 'dashboard' ? 'text-purple-500' : 'text-gray-400'}`}
+        >
+          <LayoutDashboard size={24} />
+          <span className="text-[10px] font-bold uppercase tracking-tighter">Home</span>
+        </button>
+        <button
+          onClick={() => setActivePage('period')}
+          className={`flex flex-col items-center gap-1 transition-all ${activePage === 'period' ? 'text-purple-500' : 'text-gray-400'}`}
+        >
+          <Droplets size={24} />
+          <span className="text-[10px] font-bold uppercase tracking-tighter">Period</span>
+        </button>
+        <button
+          onClick={() => setActivePage('grace')}
+          className={`flex flex-col items-center gap-1 transition-all ${activePage === 'grace' ? 'text-pink-500' : 'text-gray-400'}`}
+        >
+          <User size={24} />
+          <span className="text-[10px] font-bold uppercase tracking-tighter">Grace</span>
+        </button>
+        <button
+          onClick={() => setActivePage('tanga')}
+          className={`flex flex-col items-center gap-1 transition-all ${activePage === 'tanga' ? 'text-blue-500' : 'text-gray-400'}`}
+        >
+          <Users size={24} />
+          <span className="text-[10px] font-bold uppercase tracking-tighter">Tanga</span>
+        </button>
+        <button
+          onClick={() => setIsDarkMode(!isDarkMode)}
+          className={`flex flex-col items-center gap-1 transition-all ${isDarkMode ? 'text-yellow-400' : 'text-gray-400'}`}
+        >
+          {isDarkMode ? <Sun size={24} /> : <Moon size={24} />}
+          <span className="text-[10px] font-bold uppercase tracking-tighter">Theme</span>
+        </button>
       </nav>
 
       {/* Page Content */}

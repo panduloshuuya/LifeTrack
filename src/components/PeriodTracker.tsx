@@ -86,11 +86,11 @@ export default function PeriodTracker({ startDate, endDate, onUpdate, isDarkMode
   };
 
   return (
-    <div className={`h-full w-full flex overflow-hidden font-sans transition-colors duration-300 ${isDarkMode ? 'bg-gray-900 text-gray-100' : 'bg-white text-gray-800'}`}>
-      {/* Sidebar - Left Side */}
-      <div className={`w-[300px] border-r-2 flex flex-col h-full transition-colors duration-300 ${isDarkMode ? 'bg-gray-800/50 border-purple-900/50' : 'bg-gray-50/50 border-purple-200'}`}>
+    <div className={`h-full w-full flex flex-col md:flex-row overflow-hidden font-sans transition-colors duration-300 ${isDarkMode ? 'bg-gray-900 text-gray-100' : 'bg-white text-gray-800'}`}>
+      {/* Sidebar - Desktop: Left, Mobile: Top */}
+      <div className={`w-full md:w-[300px] border-b-2 md:border-b-0 md:border-r-2 flex flex-col h-auto md:h-full transition-colors duration-300 ${isDarkMode ? 'bg-gray-800/50 border-purple-900/50' : 'bg-gray-50/50 border-purple-200'}`}>
         {/* Header */}
-        <div className="bg-purple-500 text-white p-4 text-center font-bold text-xl uppercase tracking-widest">
+        <div className="bg-purple-500 text-white p-4 text-center font-bold text-lg md:text-xl uppercase tracking-widest">
           Period Tracker
         </div>
 
@@ -118,49 +118,51 @@ export default function PeriodTracker({ startDate, endDate, onUpdate, isDarkMode
           <div className={`text-[10px] font-bold uppercase tracking-widest ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>Cycle Overview</div>
         </div>
 
-        {/* Current Status */}
-        <div className={`p-4 border-b-2 transition-colors duration-300 ${isDarkMode ? 'border-purple-900/30 bg-purple-900/10' : 'border-purple-100 bg-purple-50/30'}`}>
-          <h2 className={`text-[10px] font-bold uppercase tracking-widest mb-2 ${isDarkMode ? 'text-purple-500' : 'text-purple-400'}`}>Current Status</h2>
-          <div className={`p-3 rounded-xl border shadow-sm flex items-center gap-3 transition-colors duration-300 ${getPhaseColor(getDayPhase(today))}`}>
-            <Droplets size={20} />
-            <div>
-              <p className="text-[11px] font-black uppercase tracking-tighter">
-                {getDayPhase(today) === 'period' ? 'Menstrual Phase' : 
-                 getDayPhase(today) === 'follicular' ? 'Follicular Phase' :
-                 getDayPhase(today) === 'ovulation' ? 'Ovulation Phase' :
-                 getDayPhase(today) === 'luteal' ? 'Luteal Phase' : 'Normal'}
-              </p>
-              <p className="text-[9px] opacity-70 font-bold">Today: {format(today, 'MMM d')}</p>
+        {/* Current Status & Legend - Grid on mobile, Stack on desktop */}
+        <div className="flex flex-col md:flex-1 overflow-y-auto">
+          <div className={`p-4 border-b-2 transition-colors duration-300 ${isDarkMode ? 'border-purple-900/30 bg-purple-900/10' : 'border-purple-100 bg-purple-50/30'}`}>
+            <h2 className={`text-[10px] font-bold uppercase tracking-widest mb-2 ${isDarkMode ? 'text-purple-500' : 'text-purple-400'}`}>Current Status</h2>
+            <div className={`p-3 rounded-xl border shadow-sm flex items-center gap-3 transition-colors duration-300 ${getPhaseColor(getDayPhase(today))}`}>
+              <Droplets size={20} />
+              <div>
+                <p className="text-[11px] font-black uppercase tracking-tighter">
+                  {getDayPhase(today) === 'period' ? 'Menstrual Phase' : 
+                   getDayPhase(today) === 'follicular' ? 'Follicular Phase' :
+                   getDayPhase(today) === 'ovulation' ? 'Ovulation Phase' :
+                   getDayPhase(today) === 'luteal' ? 'Luteal Phase' : 'Normal'}
+                </p>
+                <p className="text-[9px] opacity-70 font-bold">Today: {format(today, 'MMM d')}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-4 space-y-3">
+            <h2 className={`text-[10px] font-bold uppercase tracking-widest mb-2 ${isDarkMode ? 'text-gray-600' : 'text-gray-400'}`}>Cycle Phases</h2>
+            <div className="grid grid-cols-2 md:grid-cols-1 gap-2">
+              {[
+                { label: 'Menstrual', color: isDarkMode ? 'bg-pink-900/40' : 'bg-pink-200', text: 'text-pink-400', desc: 'Active Period' },
+                { label: 'Follicular', color: isDarkMode ? 'bg-green-900/40' : 'bg-green-100', text: 'text-green-400', desc: 'Pre-Ovulation' },
+                { label: 'Ovulation', color: isDarkMode ? 'bg-blue-900/40' : 'bg-blue-100', text: 'text-blue-400', desc: 'Fertile Window' },
+                { label: 'Luteal', color: isDarkMode ? 'bg-purple-900/40' : 'bg-purple-100', text: 'text-purple-400', desc: 'Post-Ovulation' },
+              ].map((item) => (
+                <div 
+                  key={item.label} 
+                  className={`flex items-center gap-2 p-2 rounded-lg border shadow-sm transition-colors duration-300 ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100'}`}
+                >
+                  <div className={`w-6 h-6 ${item.color} rounded-md shadow-inner flex items-center justify-center shrink-0`}>
+                    <div className="w-1 h-1 bg-white/50 rounded-full" />
+                  </div>
+                  <div className="min-w-0">
+                    <span className={`text-[9px] font-bold uppercase tracking-wider block ${item.text}`}>{item.label}</span>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </div>
 
-        {/* Cycle Labels / Legend */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-3">
-          <h2 className={`text-[10px] font-bold uppercase tracking-widest mb-2 ${isDarkMode ? 'text-gray-600' : 'text-gray-400'}`}>Cycle Phases</h2>
-          {[
-            { label: 'Menstrual', color: isDarkMode ? 'bg-pink-900/40' : 'bg-pink-200', text: 'text-pink-400', desc: 'Active Period' },
-            { label: 'Follicular', color: isDarkMode ? 'bg-green-900/40' : 'bg-green-100', text: 'text-green-400', desc: 'Pre-Ovulation' },
-            { label: 'Ovulation', color: isDarkMode ? 'bg-blue-900/40' : 'bg-blue-100', text: 'text-blue-400', desc: 'Fertile Window' },
-            { label: 'Luteal', color: isDarkMode ? 'bg-purple-900/40' : 'bg-purple-100', text: 'text-purple-400', desc: 'Post-Ovulation' },
-          ].map((item) => (
-            <div 
-              key={item.label} 
-              className={`flex items-center gap-3 p-2 rounded-lg border shadow-sm transition-colors duration-300 ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100'}`}
-            >
-              <div className={`w-8 h-8 ${item.color} rounded-md shadow-inner flex items-center justify-center shrink-0`}>
-                <div className="w-1.5 h-1.5 bg-white/50 rounded-full" />
-              </div>
-              <div className="min-w-0">
-                <span className={`text-[11px] font-bold uppercase tracking-wider block ${item.text}`}>{item.label}</span>
-                <span className={`text-[9px] font-medium truncate block ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>{item.desc}</span>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Instructions */}
-        <div className={`p-4 border-t-2 transition-colors duration-300 ${isDarkMode ? 'bg-purple-900/20 border-purple-900/50' : 'bg-purple-50 border-purple-100'}`}>
+        {/* Instructions - Hidden on mobile */}
+        <div className={`hidden md:block p-4 border-t-2 transition-colors duration-300 ${isDarkMode ? 'bg-purple-900/20 border-purple-900/50' : 'bg-purple-50 border-purple-100'}`}>
           <div className={`text-[10px] leading-relaxed font-medium italic ${isDarkMode ? 'text-purple-400/70' : 'text-purple-800/70'}`}>
             "Click a date to mark the start of your period. Click a later date to mark the end. 
             The cycle adjusts automatically."
@@ -169,11 +171,11 @@ export default function PeriodTracker({ startDate, endDate, onUpdate, isDarkMode
       </div>
 
       {/* Calendar Grid */}
-      <div className={`flex-1 flex flex-col transition-colors duration-300 ${isDarkMode ? 'bg-gray-900' : 'bg-white'}`}>
+      <div className={`flex-1 flex flex-col transition-colors duration-300 pb-20 md:pb-0 ${isDarkMode ? 'bg-gray-900' : 'bg-white'}`}>
         {/* Weekday Headers */}
         <div className="grid grid-cols-7 shrink-0">
-          {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map(day => (
-            <div key={day} className="bg-[#8B5CF6] text-white p-2 text-center font-bold text-xs uppercase border-r border-white/20 last:border-r-0">
+          {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => (
+            <div key={day} className="bg-[#8B5CF6] text-white p-2 text-center font-bold text-[10px] md:text-xs uppercase border-r border-white/20 last:border-r-0">
               {day}
             </div>
           ))}
@@ -193,23 +195,23 @@ export default function PeriodTracker({ startDate, endDate, onUpdate, isDarkMode
                 key={day.toISOString()}
                 onClick={() => handleDateClick(day)}
                 className={`
-                  flex flex-col items-center justify-center relative transition-all border-r border-b group
+                  flex flex-col items-center justify-center relative transition-all border-r border-b group min-h-[60px] md:min-h-0
                   ${getPhaseColor(phase)}
                   ${isTodayDate ? (isDarkMode ? 'bg-purple-900/20' : 'bg-purple-50') : ''}
                   hover:bg-opacity-80
                 `}
               >
-                <span className={`text-xl font-bold transition-colors ${isTodayDate ? (isDarkMode ? 'text-purple-400' : 'text-purple-600') : (isDarkMode ? 'text-gray-300' : 'text-gray-700')}`}>
+                <span className={`text-lg md:text-xl font-bold transition-colors ${isTodayDate ? (isDarkMode ? 'text-purple-400' : 'text-purple-600') : (isDarkMode ? 'text-gray-300' : 'text-gray-700')}`}>
                   {format(day, 'd')}
                 </span>
                 
                 {phase === 'period' && (
-                  <div className="w-2 h-2 bg-pink-500 rounded-full mt-1 shadow-sm" />
+                  <div className="w-1.5 h-1.5 md:w-2 md:h-2 bg-pink-500 rounded-full mt-1 shadow-sm" />
                 )}
 
                 {isTodayDate && (
-                  <div className="absolute top-2 right-2">
-                    <span className={`text-[8px] font-black uppercase tracking-widest ${isDarkMode ? 'text-purple-400' : 'text-purple-500'}`}>Today</span>
+                  <div className="absolute top-1 right-1 md:top-2 md:right-2">
+                    <span className={`text-[7px] md:text-[8px] font-black uppercase tracking-widest ${isDarkMode ? 'text-purple-400' : 'text-purple-500'}`}>Today</span>
                   </div>
                 )}
 

@@ -51,12 +51,7 @@ service cloud.firestore {
     // ===============================================================
 
     match /trackers/{trackerId} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated() && 
-        (
-          (trackerId in ['grace', 'tanga'] && isValidUserData(request.resource.data)) ||
-          (trackerId == 'period' && isValidPeriodData(request.resource.data))
-        );
+      allow read, write: if true;
     }
 
     match /users/{userId} {

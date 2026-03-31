@@ -40,6 +40,7 @@ const DAYS: DayOfWeek[] = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 export default function TaskTracker({ name, colorScheme, data, onUpdate, isDarkMode }: TaskTrackerProps) {
   const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [selectedDay, setSelectedDay] = useState<DayOfWeek>(format(startOfToday(), 'EEE') as DayOfWeek);
   const today = startOfToday();
 
   const colors = {
@@ -146,182 +147,261 @@ export default function TaskTracker({ name, colorScheme, data, onUpdate, isDarkM
   };
 
   return (
-    <div className={`h-full w-full flex flex-col overflow-hidden font-sans transition-colors duration-300 ${isDarkMode ? 'bg-gray-900 text-gray-100' : 'bg-white text-gray-800'}`}>
-      {/* Main Grid Layout */}
-      <div className="flex-1 grid grid-cols-[300px_1fr] h-full">
-        
-        {/* Left Sidebar */}
-        <div className={`border-r-2 flex flex-col h-full transition-colors duration-300 ${isDarkMode ? 'bg-gray-800/50 border-gray-700' : 'bg-gray-50/50 border-pink-200'}`}>
-          {/* Weekly Planner Header */}
-          <div className={`${colors.accent} text-white p-4 text-center font-bold text-xl uppercase tracking-widest`}>
-            Weekly Planner
-          </div>
+    <div className={`h-full w-full flex flex-col md:flex-row overflow-hidden font-sans transition-colors duration-300 ${isDarkMode ? 'bg-gray-900 text-gray-100' : 'bg-white text-gray-800'}`}>
+      {/* Sidebar - Desktop: Left, Mobile: Top/Collapsible (simplified for mobile) */}
+      <div className={`w-full md:w-80 border-b-2 md:border-b-0 md:border-r-2 flex flex-col h-auto md:h-full transition-colors duration-300 ${isDarkMode ? 'bg-gray-800/50 border-gray-700' : 'bg-gray-50/50 border-pink-200'}`}>
+        {/* Weekly Planner Header */}
+        <div className={`${colors.accent} text-white p-4 text-center font-bold text-lg md:text-xl uppercase tracking-widest`}>
+          {name}'s Planner
+        </div>
 
-          {/* Calendar Section */}
-          <div className={`p-4 border-b-2 transition-colors duration-300 ${isDarkMode ? 'border-gray-700 bg-gray-800/30' : 'border-gray-200 bg-white'}`}>
-            <div className="flex items-center justify-between mb-2">
-              <span className={`font-bold text-sm uppercase ${isDarkMode ? 'text-gray-300' : 'text-gray-900'}`}>{format(currentMonth, 'MMMM yyyy')}</span>
-              <div className="flex gap-1">
-                <button onClick={() => setCurrentMonth(addDays(startOfMonth(currentMonth), -1))} className={`p-1 rounded transition-colors ${isDarkMode ? 'hover:bg-gray-700 text-gray-400' : 'hover:bg-gray-200 text-gray-600'}`}><ChevronLeft size={16}/></button>
-                <button onClick={() => setCurrentMonth(addDays(endOfMonth(currentMonth), 1))} className={`p-1 rounded transition-colors ${isDarkMode ? 'hover:bg-gray-700 text-gray-400' : 'hover:bg-gray-200 text-gray-600'}`}><ChevronRight size={16}/></button>
+        {/* Mobile Day Selector */}
+        <div className="md:hidden flex overflow-x-auto p-2 gap-2 bg-black/5 no-scrollbar">
+          {DAYS.map(d => (
+            <button
+              key={d}
+              onClick={() => setSelectedDay(d)}
+              className={`
+                flex-shrink-0 w-12 h-12 rounded-xl flex flex-col items-center justify-center transition-all
+                ${selectedDay === d ? colors.primary + ' text-white shadow-lg' : (isDarkMode ? 'bg-gray-800 text-gray-400' : 'bg-white text-gray-600')}
+              `}
+            >
+              <span className="text-[10px] font-black uppercase leading-none mb-1">{d}</span>
+              <span className="text-xs font-bold leading-none">{calculateDailyPercentage(d)}%</span>
+            </button>
+          ))}
+        </div>
+
+        {/* Calendar Section - Hidden on mobile to save space, or can be made collapsible */}
+        <div className={`hidden md:block p-4 border-b-2 transition-colors duration-300 ${isDarkMode ? 'border-gray-700 bg-gray-800/30' : 'border-gray-200 bg-white'}`}>
+          <div className="flex items-center justify-between mb-2">
+            <span className={`font-bold text-sm uppercase ${isDarkMode ? 'text-gray-300' : 'text-gray-900'}`}>{format(currentMonth, 'MMMM yyyy')}</span>
+            <div className="flex gap-1">
+              <button onClick={() => setCurrentMonth(addDays(startOfMonth(currentMonth), -1))} className={`p-1 rounded transition-colors ${isDarkMode ? 'hover:bg-gray-700 text-gray-400' : 'hover:bg-gray-200 text-gray-600'}`}><ChevronLeft size={16}/></button>
+              <button onClick={() => setCurrentMonth(addDays(endOfMonth(currentMonth), 1))} className={`p-1 rounded transition-colors ${isDarkMode ? 'hover:bg-gray-700 text-gray-400' : 'hover:bg-gray-200 text-gray-600'}`}><ChevronRight size={16}/></button>
+            </div>
+          </div>
+          <div className={`grid grid-cols-7 gap-1 text-[10px] text-center font-bold mb-1 ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+            {['S','M','T','W','T','F','S'].map((d, i) => <div key={i}>{d}</div>)}
+          </div>
+          <div className="grid grid-cols-7 gap-1">
+            {Array.from({ length: startOfMonth(currentMonth).getDay() }).map((_, i) => <div key={i} />)}
+            {calendarDays.map(day => (
+              <div 
+                key={day.toISOString()} 
+                className={`
+                  aspect-square flex items-center justify-center text-[10px] rounded-full transition-colors
+                  ${isToday(day) ? colors.primary + ' text-white font-bold' : (isDarkMode ? 'hover:bg-gray-700 text-gray-400' : 'hover:bg-gray-200 text-gray-600')}
+                `}
+              >
+                {format(day, 'd')}
               </div>
-            </div>
-            <div className={`grid grid-cols-7 gap-1 text-[10px] text-center font-bold mb-1 ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>
-              {['S','M','T','W','T','F','S'].map((d, i) => <div key={i}>{d}</div>)}
-            </div>
-            <div className="grid grid-cols-7 gap-1">
-              {Array.from({ length: startOfMonth(currentMonth).getDay() }).map((_, i) => <div key={i} />)}
-              {calendarDays.map(day => (
-                <div 
-                  key={day.toISOString()} 
-                  className={`
-                    aspect-square flex items-center justify-center text-[10px] rounded-full transition-colors
-                    ${isToday(day) ? colors.primary + ' text-white font-bold' : (isDarkMode ? 'hover:bg-gray-700 text-gray-400' : 'hover:bg-gray-200 text-gray-600')}
-                  `}
-                >
-                  {format(day, 'd')}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Weekly Habits Section */}
-          <div className="flex-1 flex flex-col overflow-hidden">
-            <div className={`p-2 border-b flex justify-between items-center transition-colors duration-300 ${isDarkMode ? 'bg-gray-800/80 border-gray-700' : 'bg-gray-100 border-gray-200'}`}>
-              <span className={`font-bold text-xs uppercase tracking-tighter ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Weekly Habits</span>
-              <button onClick={addHabit} className={`p-1 rounded transition-colors ${isDarkMode ? 'text-pink-400 hover:bg-gray-700' : 'text-pink-600 hover:bg-white'}`}>
-                <Plus size={14} />
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto">
-              <table className="w-full text-[10px]">
-                <thead className={`sticky top-0 shadow-sm z-10 transition-colors duration-300 ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
-                  <tr className={`border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-200'}`}>
-                    <th className={`p-1 text-left ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>Habit</th>
-                    {['M','T','W','T','F','S','S'].map((d, i) => (
-                      <th key={i} className={`p-1 text-center w-6 ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>{d}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.habits.map(habit => (
-                    <tr key={habit.id} className={`border-b group transition-colors duration-300 ${isDarkMode ? 'border-gray-800 hover:bg-gray-800/30' : 'border-gray-100 hover:bg-gray-50'}`}>
-                      <td className="p-1 truncate max-w-[100px] flex items-center gap-1">
-                        <button onClick={() => removeHabit(habit.id)} className="opacity-0 group-hover:opacity-100 text-red-400"><Trash2 size={10}/></button>
-                        <span className={isDarkMode ? 'text-gray-300' : 'text-gray-700'}>{habit.name}</span>
-                      </td>
-                      {DAYS.map(day => (
-                        <td key={day} className="p-1 text-center">
-                          <button 
-                            onClick={() => toggleHabit(habit.id, day)}
-                            className={`w-4 h-4 rounded border transition-colors ${habit.completed[day] ? colors.primary : (isDarkMode ? 'border-gray-600' : 'border-gray-300')} flex items-center justify-center`}
-                          >
-                            {habit.completed[day] && <div className="w-2 h-2 bg-white rounded-full" />}
-                          </button>
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* Weekly Progress Section */}
-          <div className={`p-4 border-t-2 transition-colors duration-300 ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
-            <div className="flex justify-between items-center mb-2">
-              <span className={`text-xs font-bold uppercase ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Weekly Progress</span>
-              <span className={`text-xs font-bold ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>{calculateWeeklyPercentage()}%</span>
-            </div>
-            <div className={`w-full h-3 rounded-full overflow-hidden ${isDarkMode ? 'bg-gray-700' : 'bg-gray-200'}`}>
-              <motion.div 
-                initial={{ width: 0 }}
-                animate={{ width: `${calculateWeeklyPercentage()}%` }}
-                className={`h-full ${colors.primary}`}
-              />
-            </div>
+            ))}
           </div>
         </div>
 
-        {/* Right Content Area (Days Grid) */}
-        <div className={`grid grid-cols-7 h-full transition-colors duration-300 ${isDarkMode ? 'bg-gray-900' : 'bg-white'}`}>
+        {/* Weekly Habits Section */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <div className={`p-2 border-b flex justify-between items-center transition-colors duration-300 ${isDarkMode ? 'bg-gray-800/80 border-gray-700' : 'bg-gray-100 border-gray-200'}`}>
+            <span className={`font-bold text-xs uppercase tracking-tighter ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Weekly Habits</span>
+            <button onClick={addHabit} className={`p-1 rounded transition-colors ${isDarkMode ? 'text-pink-400 hover:bg-gray-700' : 'text-pink-600 hover:bg-white'}`}>
+              <Plus size={14} />
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto">
+            <table className="w-full text-[10px]">
+              <thead className={`sticky top-0 shadow-sm z-10 transition-colors duration-300 ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+                <tr className={`border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-200'}`}>
+                  <th className={`p-1 text-left ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>Habit</th>
+                  {['M','T','W','T','F','S','S'].map((d, i) => (
+                    <th key={i} className={`p-1 text-center w-6 ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>{d}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {data.habits.map(habit => (
+                  <tr key={habit.id} className={`border-b group transition-colors duration-300 ${isDarkMode ? 'border-gray-800 hover:bg-gray-800/30' : 'border-gray-100 hover:bg-gray-50'}`}>
+                    <td className="p-1 truncate max-w-[100px] flex items-center gap-1">
+                      <button onClick={() => removeHabit(habit.id)} className="opacity-0 group-hover:opacity-100 text-red-400"><Trash2 size={10}/></button>
+                      <span className={isDarkMode ? 'text-gray-300' : 'text-gray-700'}>{habit.name}</span>
+                    </td>
+                    {DAYS.map(day => (
+                      <td key={day} className="p-1 text-center">
+                        <button 
+                          onClick={() => toggleHabit(habit.id, day)}
+                          className={`w-4 h-4 rounded border transition-colors ${habit.completed[day] ? colors.primary : (isDarkMode ? 'border-gray-600' : 'border-gray-300')} flex items-center justify-center`}
+                        >
+                          {habit.completed[day] && <div className="w-2 h-2 bg-white rounded-full" />}
+                        </button>
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Weekly Progress Section - Desktop only in sidebar */}
+        <div className={`hidden md:block p-4 border-t-2 transition-colors duration-300 ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
+          <div className="flex justify-between items-center mb-2">
+            <span className={`text-xs font-bold uppercase ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Weekly Progress</span>
+            <span className={`text-xs font-bold ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>{calculateWeeklyPercentage()}%</span>
+          </div>
+          <div className={`w-full h-3 rounded-full overflow-hidden ${isDarkMode ? 'bg-gray-700' : 'bg-gray-200'}`}>
+            <motion.div 
+              initial={{ width: 0 }}
+              animate={{ width: `${calculateWeeklyPercentage()}%` }}
+              className={`h-full ${colors.primary}`}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Right Content Area - Desktop: Days Grid, Mobile: Selected Day View */}
+      <div className="flex-1 overflow-y-auto pb-20 md:pb-0">
+        {/* Desktop View: 7-column grid */}
+        <div className={`hidden md:grid grid-cols-7 h-full transition-colors duration-300 ${isDarkMode ? 'bg-gray-900' : 'bg-white'}`}>
           {DAYS.map((day, index) => (
-            <div key={day} className={`flex flex-col border-r transition-colors duration-300 ${isDarkMode ? 'border-gray-800' : 'border-gray-200'} ${index === 6 ? 'border-r-0' : ''}`}>
-              {/* Day Header */}
-              <div className={`${colors.accent} text-white p-2 text-center font-bold text-xs uppercase border-b border-white/20`}>
-                {day === 'Mon' ? 'Monday' : day === 'Tue' ? 'Tuesday' : day === 'Wed' ? 'Wednesday' : day === 'Thu' ? 'Thursday' : day === 'Fri' ? 'Friday' : day === 'Sat' ? 'Saturday' : 'Sunday'}
-              </div>
-
-              {/* Classes Section */}
-              <div className={`${colors.secondary} p-1 text-[10px] font-bold text-center border-b flex justify-between items-center px-2 transition-colors duration-300 ${isDarkMode ? 'border-gray-700 text-gray-300' : 'border-gray-200 text-gray-700'}`}>
-                <span className="uppercase tracking-widest">{(day === 'Sat' || day === 'Sun') ? 'Events' : 'Classes'}</span>
-                <button onClick={() => addClass(day)} className={`rounded p-0.5 transition-colors ${isDarkMode ? 'hover:bg-white/10' : 'hover:bg-white/50'}`}><Plus size={10}/></button>
-              </div>
-              <div className={`h-40 overflow-y-auto p-2 border-b-2 transition-colors duration-300 ${isDarkMode ? 'border-gray-800 bg-gray-900/50' : 'border-gray-200 bg-white'}`}>
-                <AnimatePresence>
-                  {data.weeklySchedule[day].classes.map(c => (
-                    <motion.div 
-                      key={c.id}
-                      initial={{ opacity: 0, x: -10 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      exit={{ opacity: 0, scale: 0.9 }}
-                      className={`text-[11px] mb-1 p-1 rounded border flex justify-between items-center group transition-colors duration-300 ${isDarkMode ? 'bg-gray-800 border-gray-700 text-gray-300' : 'bg-gray-50 border-gray-100 text-gray-700'}`}
-                    >
-                      <span className="truncate">{c.name}</span>
-                      <button onClick={() => removeClass(day, c.id)} className="opacity-0 group-hover:opacity-100 text-red-400"><Trash2 size={10}/></button>
-                    </motion.div>
-                  ))}
-                </AnimatePresence>
-              </div>
-
-              {/* Tasks Section */}
-              <div className={`${colors.secondary} p-1 text-[10px] font-bold text-center border-b flex justify-between items-center px-2 transition-colors duration-300 ${isDarkMode ? 'border-gray-700 text-gray-300' : 'border-gray-200 text-gray-700'}`}>
-                <span className="uppercase tracking-widest">Tasks</span>
-                <button onClick={() => addTask(day)} className={`rounded p-0.5 transition-colors ${isDarkMode ? 'hover:bg-white/10' : 'hover:bg-white/50'}`}><Plus size={10}/></button>
-              </div>
-              <div className={`flex-1 overflow-y-auto p-2 transition-colors duration-300 ${isDarkMode ? 'bg-gray-900' : 'bg-white'}`}>
-                <AnimatePresence>
-                  {data.weeklySchedule[day].tasks.map(t => (
-                    <motion.div 
-                      key={t.id}
-                      initial={{ opacity: 0, scale: 0.95 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      exit={{ opacity: 0, x: 10 }}
-                      className="flex items-start gap-2 mb-2 group"
-                    >
-                      <button 
-                        onClick={() => toggleTask(day, t.id)}
-                        className={`mt-0.5 flex-shrink-0 transition-colors ${t.completed ? colors.text : (isDarkMode ? 'text-gray-600' : 'text-gray-300')}`}
-                      >
-                        {t.completed ? <CheckSquare size={14} /> : <Square size={14} />}
-                      </button>
-                      <div className="flex-1 min-w-0">
-                        <p className={`text-[11px] leading-tight break-words transition-colors ${t.completed ? 'line-through text-gray-500' : (isDarkMode ? 'text-gray-300' : 'text-gray-700')}`}>
-                          {t.name}
-                        </p>
-                      </div>
-                      <button onClick={() => removeTask(day, t.id)} className="opacity-0 group-hover:opacity-100 text-red-400 mt-0.5"><Trash2 size={10}/></button>
-                    </motion.div>
-                  ))}
-                </AnimatePresence>
-              </div>
-
-              {/* Daily Progress Bar */}
-              <div className={`p-2 border-t transition-colors duration-300 ${isDarkMode ? 'border-gray-800 bg-gray-800/30' : 'border-gray-100 bg-gray-50'}`}>
-                <div className={`flex justify-between text-[9px] font-bold mb-1 ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>
-                  <span>DONE</span>
-                  <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>{calculateDailyPercentage(day)}%</span>
-                </div>
-                <div className={`w-full h-1.5 rounded-full overflow-hidden ${isDarkMode ? 'bg-gray-700' : 'bg-gray-200'}`}>
-                  <motion.div 
-                    initial={{ width: 0 }}
-                    animate={{ width: `${calculateDailyPercentage(day)}%` }}
-                    className={`h-full ${colors.primary}`}
-                  />
-                </div>
-              </div>
-            </div>
+            <DayColumn 
+              key={day} 
+              day={day} 
+              index={index} 
+              colors={colors} 
+              isDarkMode={isDarkMode} 
+              data={data}
+              addClass={addClass}
+              addTask={addTask}
+              toggleTask={toggleTask}
+              removeClass={removeClass}
+              removeTask={removeTask}
+              calculateDailyPercentage={calculateDailyPercentage}
+            />
           ))}
+        </div>
+
+        {/* Mobile View: Single Day View */}
+        <div className="md:hidden h-full">
+          <DayColumn 
+            day={selectedDay} 
+            index={0} 
+            colors={colors} 
+            isDarkMode={isDarkMode} 
+            data={data}
+            addClass={addClass}
+            addTask={addTask}
+            toggleTask={toggleTask}
+            removeClass={removeClass}
+            removeTask={removeTask}
+            calculateDailyPercentage={calculateDailyPercentage}
+            isMobile
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DayColumn({ 
+  day, 
+  index, 
+  colors, 
+  isDarkMode, 
+  data, 
+  addClass, 
+  addTask, 
+  toggleTask, 
+  removeClass, 
+  removeTask, 
+  calculateDailyPercentage,
+  isMobile = false
+}: {
+  day: DayOfWeek;
+  index: number;
+  colors: any;
+  isDarkMode: boolean;
+  data: UserData;
+  addClass: (day: DayOfWeek) => void;
+  addTask: (day: DayOfWeek) => void;
+  toggleTask: (day: DayOfWeek, id: string) => void;
+  removeClass: (day: DayOfWeek, id: string) => void;
+  removeTask: (day: DayOfWeek, id: string) => void;
+  calculateDailyPercentage: (day: DayOfWeek) => number;
+  isMobile?: boolean;
+}) {
+  return (
+    <div className={`flex flex-col border-r transition-colors duration-300 ${isDarkMode ? 'border-gray-800' : 'border-gray-200'} ${index === 6 ? 'border-r-0' : ''} ${isMobile ? 'border-r-0 h-full' : ''}`}>
+      {/* Day Header */}
+      <div className={`${colors.accent} text-white p-2 text-center font-bold text-xs uppercase border-b border-white/20`}>
+        {day === 'Mon' ? 'Monday' : day === 'Tue' ? 'Tuesday' : day === 'Wed' ? 'Wednesday' : day === 'Thu' ? 'Thursday' : day === 'Fri' ? 'Friday' : day === 'Sat' ? 'Saturday' : 'Sunday'}
+      </div>
+
+      {/* Classes Section */}
+      <div className={`${colors.secondary} p-1 text-[10px] md:text-[10px] font-bold text-center border-b flex justify-between items-center px-2 transition-colors duration-300 ${isDarkMode ? 'border-gray-700 text-gray-300' : 'border-gray-200 text-gray-700'}`}>
+        <span className="uppercase tracking-widest">{(day === 'Sat' || day === 'Sun') ? 'Events' : 'Classes'}</span>
+        <button onClick={() => addClass(day)} className={`rounded p-1 transition-colors ${isDarkMode ? 'hover:bg-white/10' : 'hover:bg-white/50'}`}><Plus size={14}/></button>
+      </div>
+      <div className={`${isMobile ? 'h-48' : 'h-40'} overflow-y-auto p-2 border-b-2 transition-colors duration-300 ${isDarkMode ? 'border-gray-800 bg-gray-900/50' : 'border-gray-200 bg-white'}`}>
+        <AnimatePresence>
+          {data.weeklySchedule[day].classes.map(c => (
+            <motion.div 
+              key={c.id}
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              className={`text-[12px] md:text-[11px] mb-1 p-2 md:p-1 rounded border flex justify-between items-center group transition-colors duration-300 ${isDarkMode ? 'bg-gray-800 border-gray-700 text-gray-300' : 'bg-gray-50 border-gray-100 text-gray-700'}`}
+            >
+              <span className="truncate">{c.name}</span>
+              <button onClick={() => removeClass(day, c.id)} className={`md:opacity-0 md:group-hover:opacity-100 text-red-400 p-1`}><Trash2 size={12}/></button>
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </div>
+
+      {/* Tasks Section */}
+      <div className={`${colors.secondary} p-1 text-[10px] md:text-[10px] font-bold text-center border-b flex justify-between items-center px-2 transition-colors duration-300 ${isDarkMode ? 'border-gray-700 text-gray-300' : 'border-gray-200 text-gray-700'}`}>
+        <span className="uppercase tracking-widest">Tasks</span>
+        <button onClick={() => addTask(day)} className={`rounded p-1 transition-colors ${isDarkMode ? 'hover:bg-white/10' : 'hover:bg-white/50'}`}><Plus size={14}/></button>
+      </div>
+      <div className={`flex-1 overflow-y-auto p-2 transition-colors duration-300 ${isDarkMode ? 'bg-gray-900' : 'bg-white'}`}>
+        <AnimatePresence>
+          {data.weeklySchedule[day].tasks.map(t => (
+            <motion.div 
+              key={t.id}
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, x: 10 }}
+              className="flex items-start gap-2 mb-3 md:mb-2 group"
+            >
+              <button 
+                onClick={() => toggleTask(day, t.id)}
+                className={`mt-0.5 flex-shrink-0 transition-colors ${t.completed ? colors.text : (isDarkMode ? 'text-gray-600' : 'text-gray-300')}`}
+              >
+                {t.completed ? <CheckSquare size={18} className="md:w-3.5 md:h-3.5" /> : <Square size={18} className="md:w-3.5 md:h-3.5" />}
+              </button>
+              <div className="flex-1 min-w-0">
+                <p className={`text-sm md:text-[11px] leading-tight break-words transition-colors ${t.completed ? 'line-through text-gray-500' : (isDarkMode ? 'text-gray-300' : 'text-gray-700')}`}>
+                  {t.name}
+                </p>
+              </div>
+              <button onClick={() => removeTask(day, t.id)} className={`md:opacity-0 md:group-hover:opacity-100 text-red-400 mt-0.5 p-1`}><Trash2 size={12}/></button>
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </div>
+
+      {/* Daily Progress Bar */}
+      <div className={`p-2 border-t transition-colors duration-300 ${isDarkMode ? 'border-gray-800 bg-gray-800/30' : 'border-gray-100 bg-gray-50'}`}>
+        <div className={`flex justify-between text-[9px] font-bold mb-1 ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+          <span>DONE</span>
+          <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>{calculateDailyPercentage(day)}%</span>
+        </div>
+        <div className={`w-full h-1.5 rounded-full overflow-hidden ${isDarkMode ? 'bg-gray-700' : 'bg-gray-200'}`}>
+          <motion.div 
+            initial={{ width: 0 }}
+            animate={{ width: `${calculateDailyPercentage(day)}%` }}
+            className={`h-full ${colors.primary}`}
+          />
         </div>
       </div>
     </div>
