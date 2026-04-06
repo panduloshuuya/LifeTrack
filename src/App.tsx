@@ -4,7 +4,7 @@
  */
 
 import * as React from 'react';
-import { useState, useEffect, Component, ErrorInfo, ReactNode } from 'react';
+import { useState, useEffect, useMemo, Component, ErrorInfo, ReactNode } from 'react';
 import { 
   startOfWeek, 
   isSunday, 
@@ -37,7 +37,8 @@ import { doc, onSnapshot, setDoc } from 'firebase/firestore';
 import { auth, db, googleProvider, handleFirestoreError, OperationType } from './firebase';
 import PeriodTracker from './components/PeriodTracker';
 import TaskTracker from './components/TaskTracker';
-import { UserData, PeriodData, DayOfWeek } from './types';
+import Activities from './components/Activities';
+import { UserData, PeriodData, DayOfWeek, Activity } from './types';
 
 // Error Boundary Component
 interface ErrorBoundaryProps {
@@ -88,13 +89,13 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
 const INITIAL_USER_DATA: UserData = {
   habits: [],
   weeklySchedule: {
+    Sun: { classes: [], tasks: [] },
     Mon: { classes: [], tasks: [] },
     Tue: { classes: [], tasks: [] },
     Wed: { classes: [], tasks: [] },
     Thu: { classes: [], tasks: [] },
     Fri: { classes: [], tasks: [] },
     Sat: { classes: [], tasks: [] },
-    Sun: { classes: [], tasks: [] },
   },
   lastResetDate: startOfWeek(new Date(), { weekStartsOn: 6 }).toISOString(), // Reset on Saturdays
 };
@@ -105,21 +106,30 @@ const INITIAL_PERIOD_DATA: PeriodData = {
   cycleLength: 28,
 };
 
-type Page = 'dashboard' | 'period' | 'grace' | 'tanga';
+type Page = 'dashboard' | 'period' | 'grace' | 'tanga' | 'activities';
 
 function Dashboard({ 
   graceData, 
   tangaData, 
   periodData,
+  activities,
   isDarkMode
 }: { 
   graceData: UserData, 
   tangaData: UserData, 
   periodData: PeriodData,
+  activities: Activity[],
   isDarkMode: boolean
 }) {
   const today = startOfToday();
   const dayName = format(today, 'EEE') as DayOfWeek;
+  
+  const upcomingActivities = useMemo(() => {
+    return activities
+      .filter(a => isAfter(parseISO(a.date), startOfToday()) || isSameDay(parseISO(a.date), startOfToday()))
+      .sort((a, b) => parseISO(a.date).getTime() - parseISO(b.date).getTime())
+      .slice(0, 4);
+  }, [activities]);
   
   const calculatePercentage = (data: UserData) => {
     if (data.habits.length === 0) return 0;
@@ -218,7 +228,7 @@ function Dashboard({
         </motion.div>
 
         {/* Main Accountability Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
           {/* Grace's Column */}
           <div className="space-y-4 md:space-y-6">
             <motion.div 
@@ -316,6 +326,45 @@ function Dashboard({
               </div>
             </motion.div>
           </div>
+
+          {/* Upcoming Activities Column */}
+          <div className="space-y-4 md:space-y-6">
+            <motion.div 
+              whileHover={{ y: -5 }}
+              className={`p-4 md:p-6 rounded-3xl md:rounded-[2rem] shadow-lg border transition-colors duration-300 ${isDarkMode ? 'bg-gray-800 border-gray-700 shadow-none' : 'bg-white border-gray-100 shadow-gray-100/50'}`}
+            >
+              <div className="flex items-center justify-between mb-3 md:mb-6">
+                <div className="flex items-center gap-2 md:gap-3">
+                  <div className={`w-10 h-10 md:w-12 md:h-12 rounded-xl md:rounded-2xl flex items-center justify-center ${isDarkMode ? 'bg-gray-700' : 'bg-gray-100'}`}>
+                    <Calendar className="text-gray-500 md:w-6 md:h-6" size={18} />
+                  </div>
+                  <div>
+                    <h3 className={`text-base md:text-xl font-bold ${isDarkMode ? 'text-gray-100' : 'text-gray-800'}`}>Activities</h3>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-3 md:space-y-4">
+                <h4 className={`text-[9px] md:text-[10px] font-black uppercase tracking-widest border-b pb-1 md:pb-2 ${isDarkMode ? 'text-gray-500 border-gray-700' : 'text-gray-400 border-gray-100'}`}>Upcoming Events</h4>
+                <div className="space-y-3 max-h-80 md:max-h-96 overflow-y-auto pr-1 md:pr-2">
+                  {upcomingActivities.length === 0 ? (
+                    <p className="text-[10px] md:text-xs text-gray-400 italic">No upcoming activities.</p>
+                  ) : (
+                    upcomingActivities.map(a => (
+                      <div key={a.id} className={`p-3 rounded-xl border-l-4 transition-colors duration-300 ${isDarkMode ? 'bg-gray-900/50 border-gray-700' : 'bg-gray-50 border-gray-100'} ${a.owner === 'grace' ? 'border-l-pink-500' : 'border-l-blue-500'}`}>
+                        <div className="flex justify-between items-center mb-1">
+                          <span className={`text-[8px] font-black uppercase tracking-widest ${a.owner === 'grace' ? 'text-pink-500' : 'text-blue-500'}`}>{a.owner}</span>
+                          <span className="text-[8px] font-bold text-gray-400">{format(parseISO(a.date), 'MMM d')}</span>
+                        </div>
+                        <p className={`text-[11px] font-bold truncate ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>{a.name}</p>
+                        <p className="text-[9px] text-gray-400 font-medium">{a.time}</p>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </motion.div>
+          </div>
         </div>
       </div>
     </div>
@@ -332,6 +381,8 @@ function AppContent() {
   const [graceData, setGraceData] = useState<UserData>(INITIAL_USER_DATA);
   const [tangaData, setTangaData] = useState<UserData>(INITIAL_USER_DATA);
   const [periodData, setPeriodData] = useState<PeriodData>(INITIAL_PERIOD_DATA);
+  const [activities, setActivities] = useState<Activity[]>([]);
+  const [highlightDate, setHighlightDate] = useState<string | null>(null);
 
   useEffect(() => {
     localStorage.setItem('darkMode', JSON.stringify(isDarkMode));
@@ -368,10 +419,20 @@ function AppContent() {
       }
     }, (e) => handleFirestoreError(e, OperationType.GET, 'trackers/period'));
 
+    const unsubActivities = onSnapshot(doc(db, 'trackers', 'activities'), (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.data();
+        setActivities(data.list || []);
+      } else {
+        setDoc(doc(db, 'trackers', 'activities'), { list: [] }).catch(e => handleFirestoreError(e, OperationType.WRITE, 'trackers/activities'));
+      }
+    }, (e) => handleFirestoreError(e, OperationType.GET, 'trackers/activities'));
+
     return () => {
       unsubGrace();
       unsubTanga();
       unsubPeriod();
+      unsubActivities();
     };
   }, []);
 
@@ -398,7 +459,7 @@ function AppContent() {
           const newHabits = data.habits.map(habit => ({
             ...habit,
             completed: {
-              Mon: false, Tue: false, Wed: false, Thu: false, Fri: false, Sat: false, Sun: false
+              Sun: false, Mon: false, Tue: false, Wed: false, Thu: false, Fri: false, Sat: false
             }
           }));
 
@@ -437,6 +498,16 @@ function AppContent() {
     const newData = { ...periodData, startDate: start, endDate: end };
     setPeriodData(newData);
     setDoc(doc(db, 'trackers', 'period'), newData).catch(e => handleFirestoreError(e, OperationType.WRITE, 'trackers/period'));
+  };
+
+  const handleUpdateActivities = (newActivities: Activity[]) => {
+    setActivities(newActivities);
+    setDoc(doc(db, 'trackers', 'activities'), { list: newActivities }).catch(e => handleFirestoreError(e, OperationType.WRITE, 'trackers/activities'));
+  };
+
+  const handleActivityClick = (date: string) => {
+    setHighlightDate(date);
+    setActivePage('activities');
   };
 
   return (
@@ -491,6 +562,16 @@ function AppContent() {
             <Users size={18} />
             Tanga
           </button>
+          <button
+            onClick={() => setActivePage('activities')}
+            className={`
+              flex items-center gap-2 px-4 py-2 rounded-lg transition-all text-sm font-bold
+              ${activePage === 'activities' ? (isDarkMode ? 'bg-gray-800 shadow-sm text-purple-400' : 'bg-white shadow-sm text-purple-600') : 'text-gray-500 hover:text-gray-700'}
+            `}
+          >
+            <Calendar size={18} />
+            Activities
+          </button>
         </div>
 
         <div className="flex items-center gap-4">
@@ -538,6 +619,13 @@ function AppContent() {
           <span className="text-[10px] font-bold uppercase tracking-tighter">Tanga</span>
         </button>
         <button
+          onClick={() => setActivePage('activities')}
+          className={`flex flex-col items-center gap-1 transition-all ${activePage === 'activities' ? 'text-purple-500' : 'text-gray-400'}`}
+        >
+          <Calendar size={24} />
+          <span className="text-[10px] font-bold uppercase tracking-tighter">Events</span>
+        </button>
+        <button
           onClick={() => setIsDarkMode(!isDarkMode)}
           className={`flex flex-col items-center gap-1 transition-all ${isDarkMode ? 'text-yellow-400' : 'text-gray-400'}`}
         >
@@ -561,7 +649,26 @@ function AppContent() {
                 graceData={graceData}
                 tangaData={tangaData}
                 periodData={periodData}
+                activities={activities}
                 isDarkMode={isDarkMode}
+              />
+            </motion.div>
+          )}
+
+          {activePage === 'activities' && (
+            <motion.div
+              key="activities"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 1.05 }}
+              className="absolute inset-0"
+            >
+              <Activities 
+                activities={activities}
+                onUpdate={handleUpdateActivities}
+                isDarkMode={isDarkMode}
+                highlightDate={highlightDate}
+                onClearHighlight={() => setHighlightDate(null)}
               />
             </motion.div>
           )}
@@ -597,6 +704,8 @@ function AppContent() {
                 data={graceData}
                 onUpdate={handleUpdateGrace}
                 isDarkMode={isDarkMode}
+                activities={activities}
+                onActivityClick={handleActivityClick}
               />
             </motion.div>
           )}
@@ -615,6 +724,8 @@ function AppContent() {
                 data={tangaData}
                 onUpdate={handleUpdateTanga}
                 isDarkMode={isDarkMode}
+                activities={activities}
+                onActivityClick={handleActivityClick}
               />
             </motion.div>
           )}

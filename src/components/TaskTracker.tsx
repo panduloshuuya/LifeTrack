@@ -13,7 +13,8 @@ import {
   endOfMonth, 
   eachDayOfInterval,
   isSameDay,
-  startOfToday
+  startOfToday,
+  parseISO
 } from 'date-fns';
 import { 
   CheckSquare, 
@@ -23,10 +24,11 @@ import {
   Calendar as CalendarIcon, 
   LayoutGrid,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Pencil
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { UserData, DayOfWeek, Habit, Task, ClassEvent } from '../types';
+import { UserData, DayOfWeek, Habit, Task, ClassEvent, Activity } from '../types';
 
 interface TaskTrackerProps {
   name: string;
@@ -34,13 +36,35 @@ interface TaskTrackerProps {
   data: UserData;
   onUpdate: (newData: UserData) => void;
   isDarkMode: boolean;
+  activities: Activity[];
+  onActivityClick: (date: string) => void;
 }
 
-const DAYS: DayOfWeek[] = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const DAYS: DayOfWeek[] = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-export default function TaskTracker({ name, colorScheme, data, onUpdate, isDarkMode }: TaskTrackerProps) {
+export default function TaskTracker({ 
+  name, 
+  colorScheme, 
+  data, 
+  onUpdate, 
+  isDarkMode,
+  activities,
+  onActivityClick
+}: TaskTrackerProps) {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDay, setSelectedDay] = useState<DayOfWeek>(format(startOfToday(), 'EEE') as DayOfWeek);
+  const [modal, setModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    value: string;
+    onConfirm: (val: string) => void;
+  }>({
+    isOpen: false,
+    title: '',
+    value: '',
+    onConfirm: () => {},
+  });
+
   const today = startOfToday();
 
   const colors = {
@@ -84,14 +108,67 @@ export default function TaskTracker({ name, colorScheme, data, onUpdate, isDarkM
   };
 
   const addHabit = () => {
-    const name = prompt('Enter habit name:');
-    if (!name) return;
-    const newHabit: Habit = {
-      id: crypto.randomUUID(),
-      name,
-      completed: { Mon: false, Tue: false, Wed: false, Thu: false, Fri: false, Sat: false, Sun: false }
-    };
-    onUpdate({ ...data, habits: [...data.habits, newHabit] });
+    setModal({
+      isOpen: true,
+      title: 'Add New Habit',
+      value: '',
+      onConfirm: (val) => {
+        if (!val.trim()) return;
+        const newHabit: Habit = {
+          id: crypto.randomUUID(),
+          name: val.trim(),
+          completed: { Mon: false, Tue: false, Wed: false, Thu: false, Fri: false, Sat: false, Sun: false }
+        };
+        onUpdate({ ...data, habits: [...data.habits, newHabit] });
+      }
+    });
+  };
+
+  const editHabit = (habitId: string, currentName: string) => {
+    setModal({
+      isOpen: true,
+      title: 'Edit Habit',
+      value: currentName,
+      onConfirm: (val) => {
+        if (!val.trim() || val.trim() === currentName) return;
+        const newHabits = data.habits.map(h => 
+          h.id === habitId ? { ...h, name: val.trim() } : h
+        );
+        onUpdate({ ...data, habits: newHabits });
+      }
+    });
+  };
+
+  const editClass = (day: DayOfWeek, classId: string, currentName: string) => {
+    setModal({
+      isOpen: true,
+      title: 'Edit Class/Event',
+      value: currentName,
+      onConfirm: (val) => {
+        if (!val.trim() || val.trim() === currentName) return;
+        const newSchedule = { ...data.weeklySchedule };
+        newSchedule[day].classes = newSchedule[day].classes.map(c => 
+          c.id === classId ? { ...c, name: val.trim() } : c
+        );
+        onUpdate({ ...data, weeklySchedule: newSchedule });
+      }
+    });
+  };
+
+  const editTask = (day: DayOfWeek, taskId: string, currentName: string) => {
+    setModal({
+      isOpen: true,
+      title: 'Edit Task',
+      value: currentName,
+      onConfirm: (val) => {
+        if (!val.trim() || val.trim() === currentName) return;
+        const newSchedule = { ...data.weeklySchedule };
+        newSchedule[day].tasks = newSchedule[day].tasks.map(t => 
+          t.id === taskId ? { ...t, name: val.trim() } : t
+        );
+        onUpdate({ ...data, weeklySchedule: newSchedule });
+      }
+    });
   };
 
   const toggleHabit = (habitId: string, day: DayOfWeek) => {
@@ -105,21 +182,33 @@ export default function TaskTracker({ name, colorScheme, data, onUpdate, isDarkM
   };
 
   const addClass = (day: DayOfWeek) => {
-    const name = prompt('Enter class/event name:');
-    if (!name) return;
-    const newClass: ClassEvent = { id: crypto.randomUUID(), name };
-    const newSchedule = { ...data.weeklySchedule };
-    newSchedule[day].classes.push(newClass);
-    onUpdate({ ...data, weeklySchedule: newSchedule });
+    setModal({
+      isOpen: true,
+      title: `Add to ${day}`,
+      value: '',
+      onConfirm: (val) => {
+        if (!val.trim()) return;
+        const newClass: ClassEvent = { id: crypto.randomUUID(), name: val.trim() };
+        const newSchedule = { ...data.weeklySchedule };
+        newSchedule[day].classes.push(newClass);
+        onUpdate({ ...data, weeklySchedule: newSchedule });
+      }
+    });
   };
 
   const addTask = (day: DayOfWeek) => {
-    const name = prompt('Enter task name:');
-    if (!name) return;
-    const newTask: Task = { id: crypto.randomUUID(), name, completed: false };
-    const newSchedule = { ...data.weeklySchedule };
-    newSchedule[day].tasks.push(newTask);
-    onUpdate({ ...data, weeklySchedule: newSchedule });
+    setModal({
+      isOpen: true,
+      title: `New Task for ${day}`,
+      value: '',
+      onConfirm: (val) => {
+        if (!val.trim()) return;
+        const newTask: Task = { id: crypto.randomUUID(), name: val.trim(), completed: false };
+        const newSchedule = { ...data.weeklySchedule };
+        newSchedule[day].tasks.push(newTask);
+        onUpdate({ ...data, weeklySchedule: newSchedule });
+      }
+    });
   };
 
   const toggleTask = (day: DayOfWeek, taskId: string) => {
@@ -186,17 +275,30 @@ export default function TaskTracker({ name, colorScheme, data, onUpdate, isDarkM
           </div>
           <div className="grid grid-cols-7 gap-1">
             {Array.from({ length: startOfMonth(currentMonth).getDay() }).map((_, i) => <div key={i} />)}
-            {calendarDays.map(day => (
-              <div 
-                key={day.toISOString()} 
-                className={`
-                  aspect-square flex items-center justify-center text-[10px] rounded-full transition-colors
-                  ${isToday(day) ? colors.primary + ' text-white font-bold' : (isDarkMode ? 'hover:bg-gray-700 text-gray-400' : 'hover:bg-gray-200 text-gray-600')}
-                `}
-              >
-                {format(day, 'd')}
-              </div>
-            ))}
+            {calendarDays.map(day => {
+              if (!day) return <div key={Math.random()} />;
+              const hasActivity = activities.some(a => 
+                a.owner.toLowerCase() === name.toLowerCase() && 
+                isSameDay(parseISO(a.date), day)
+              );
+              
+              return (
+                <div 
+                  key={day.toISOString()} 
+                  onClick={() => hasActivity && onActivityClick(day.toISOString())}
+                  className={`
+                    aspect-square flex flex-col items-center justify-center text-[10px] rounded-full transition-colors relative
+                    ${isToday(day) ? colors.primary + ' text-white font-bold' : (isDarkMode ? 'hover:bg-gray-700 text-gray-400' : 'hover:bg-gray-200 text-gray-600')}
+                    ${hasActivity ? 'cursor-pointer' : ''}
+                  `}
+                >
+                  {format(day, 'd')}
+                  {hasActivity && (
+                    <div className={`w-1 h-1 rounded-full absolute bottom-1 ${colorScheme === 'pink' ? 'bg-pink-500' : 'bg-blue-500'} ${isToday(day) ? 'bg-white' : ''}`} />
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
 
@@ -222,7 +324,10 @@ export default function TaskTracker({ name, colorScheme, data, onUpdate, isDarkM
                 {data.habits.map(habit => (
                   <tr key={habit.id} className={`border-b group transition-colors duration-300 ${isDarkMode ? 'border-gray-800 hover:bg-gray-800/30' : 'border-gray-100 hover:bg-gray-50'}`}>
                     <td className="p-1 truncate max-w-[100px] flex items-center gap-1">
-                      <button onClick={() => removeHabit(habit.id)} className="opacity-0 group-hover:opacity-100 text-red-400"><Trash2 size={10}/></button>
+                      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button onClick={() => editHabit(habit.id, habit.name)} className="text-blue-400 hover:text-blue-500"><Pencil size={10}/></button>
+                        <button onClick={() => removeHabit(habit.id)} className="text-red-400 hover:text-red-500"><Trash2 size={10}/></button>
+                      </div>
                       <span className={isDarkMode ? 'text-gray-300' : 'text-gray-700'}>{habit.name}</span>
                     </td>
                     {DAYS.map(day => (
@@ -271,7 +376,9 @@ export default function TaskTracker({ name, colorScheme, data, onUpdate, isDarkM
               isDarkMode={isDarkMode} 
               data={data}
               addClass={addClass}
+              editClass={editClass}
               addTask={addTask}
+              editTask={editTask}
               toggleTask={toggleTask}
               removeClass={removeClass}
               removeTask={removeTask}
@@ -289,7 +396,9 @@ export default function TaskTracker({ name, colorScheme, data, onUpdate, isDarkM
             isDarkMode={isDarkMode} 
             data={data}
             addClass={addClass}
+            editClass={editClass}
             addTask={addTask}
+            editTask={editTask}
             toggleTask={toggleTask}
             removeClass={removeClass}
             removeTask={removeTask}
@@ -298,6 +407,72 @@ export default function TaskTracker({ name, colorScheme, data, onUpdate, isDarkM
           />
         </div>
       </div>
+
+      {/* Input Modal */}
+      <AnimatePresence>
+        {modal.isOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setModal({ ...modal, isOpen: false })}
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className={`relative w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden transition-colors duration-300 ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}
+            >
+              <div className={`${colors.accent} p-4 text-white text-center font-bold uppercase tracking-widest`}>
+                {modal.title}
+              </div>
+              <div className="p-6">
+                <input 
+                  autoFocus
+                  type="text"
+                  value={modal.value}
+                  onChange={(e) => setModal({ ...modal, value: e.target.value })}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      modal.onConfirm(modal.value);
+                      setModal({ ...modal, isOpen: false });
+                    } else if (e.key === 'Escape') {
+                      setModal({ ...modal, isOpen: false });
+                    }
+                  }}
+                  className={`w-full p-3 rounded-xl border-2 outline-none transition-all mb-6 ${
+                    isDarkMode 
+                      ? `bg-gray-900 border-gray-700 text-white focus:border-${colorScheme === 'pink' ? 'pink' : 'blue'}-500` 
+                      : `bg-gray-50 border-gray-100 text-gray-800 focus:border-${colorScheme === 'pink' ? 'pink' : 'blue'}-500`
+                  }`}
+                  placeholder="Type something..."
+                />
+                <div className="flex gap-3">
+                  <button 
+                    onClick={() => setModal({ ...modal, isOpen: false })}
+                    className={`flex-1 py-3 rounded-xl font-bold text-sm uppercase tracking-wider transition-colors ${
+                      isDarkMode ? 'bg-gray-700 text-gray-400 hover:bg-gray-600' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                    }`}
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    onClick={() => {
+                      modal.onConfirm(modal.value);
+                      setModal({ ...modal, isOpen: false });
+                    }}
+                    className={`flex-1 py-3 rounded-xl font-bold text-sm uppercase tracking-wider text-white shadow-lg transition-transform active:scale-95 ${colors.primary}`}
+                  >
+                    Enter
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -309,7 +484,9 @@ function DayColumn({
   isDarkMode, 
   data, 
   addClass, 
+  editClass,
   addTask, 
+  editTask,
   toggleTask, 
   removeClass, 
   removeTask, 
@@ -322,7 +499,9 @@ function DayColumn({
   isDarkMode: boolean;
   data: UserData;
   addClass: (day: DayOfWeek) => void;
+  editClass: (day: DayOfWeek, id: string, name: string) => void;
   addTask: (day: DayOfWeek) => void;
+  editTask: (day: DayOfWeek, id: string, name: string) => void;
   toggleTask: (day: DayOfWeek, id: string) => void;
   removeClass: (day: DayOfWeek, id: string) => void;
   removeTask: (day: DayOfWeek, id: string) => void;
@@ -349,10 +528,13 @@ function DayColumn({
               initial={{ opacity: 0, x: -10 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, scale: 0.9 }}
-              className={`text-[12px] md:text-[11px] mb-1 p-2 md:p-1 rounded border flex justify-between items-center group transition-colors duration-300 ${isDarkMode ? 'bg-gray-800 border-gray-700 text-gray-300' : 'bg-gray-50 border-gray-100 text-gray-700'}`}
+              className={`text-[12px] md:text-[11px] mb-1 p-2 md:p-1 rounded border flex justify-between items-center group transition-colors duration-300 ${isDarkMode ? 'bg-gray-800 border-gray-700 text-gray-300' : 'bg-white border-gray-100 text-gray-700'}`}
             >
-              <span className="truncate">{c.name}</span>
-              <button onClick={() => removeClass(day, c.id)} className={`md:opacity-0 md:group-hover:opacity-100 text-red-400 p-1`}><Trash2 size={12}/></button>
+              <span className="truncate flex-1">{c.name}</span>
+              <div className="flex items-center gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                <button onClick={() => editClass(day, c.id, c.name)} className="text-blue-400 hover:text-blue-500 p-1"><Pencil size={12}/></button>
+                <button onClick={() => removeClass(day, c.id)} className="text-red-400 hover:text-red-500 p-1"><Trash2 size={12}/></button>
+              </div>
             </motion.div>
           ))}
         </AnimatePresence>
@@ -384,7 +566,10 @@ function DayColumn({
                   {t.name}
                 </p>
               </div>
-              <button onClick={() => removeTask(day, t.id)} className={`md:opacity-0 md:group-hover:opacity-100 text-red-400 mt-0.5 p-1`}><Trash2 size={12}/></button>
+              <div className="flex items-center gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity mt-0.5">
+                <button onClick={() => editTask(day, t.id, t.name)} className="text-blue-400 hover:text-blue-500 p-1"><Pencil size={12}/></button>
+                <button onClick={() => removeTask(day, t.id)} className="text-red-400 hover:text-red-500 p-1"><Trash2 size={12}/></button>
+              </div>
             </motion.div>
           ))}
         </AnimatePresence>

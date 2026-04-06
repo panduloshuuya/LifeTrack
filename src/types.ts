@@ -28,6 +28,14 @@ export interface DayData {
   tasks: Task[];
 }
 
+export interface Activity {
+  id: string;
+  name: string;
+  time: string;
+  date: string; // ISO string
+  owner: 'grace' | 'tanga';
+}
+
 export interface UserData {
   habits: Habit[];
   weeklySchedule: Record<DayOfWeek, DayData>;
@@ -38,4 +46,11 @@ export interface PeriodData {
   startDate: string | null; // ISO string
   endDate: string | null; // ISO string
   cycleLength: number; // default 28
+}
+
+export interface AppData {
+  grace: UserData;
+  tanga: UserData;
+  period: PeriodData;
+  activities: Activity[];
 }
