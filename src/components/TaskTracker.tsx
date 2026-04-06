@@ -323,12 +323,12 @@ export default function TaskTracker({
               <tbody>
                 {data.habits.map(habit => (
                   <tr key={habit.id} className={`border-b group transition-colors duration-300 ${isDarkMode ? 'border-gray-800 hover:bg-gray-800/30' : 'border-gray-100 hover:bg-gray-50'}`}>
-                    <td className="p-1 truncate max-w-[100px] flex items-center gap-1">
-                      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <td className="p-1 flex items-start gap-1">
+                      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-0.5">
                         <button onClick={() => editHabit(habit.id, habit.name)} className="text-blue-400 hover:text-blue-500"><Pencil size={10}/></button>
                         <button onClick={() => removeHabit(habit.id)} className="text-red-400 hover:text-red-500"><Trash2 size={10}/></button>
                       </div>
-                      <span className={isDarkMode ? 'text-gray-300' : 'text-gray-700'}>{habit.name}</span>
+                      <span className={`break-words whitespace-normal leading-tight ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>{habit.name}</span>
                     </td>
                     {DAYS.map(day => (
                       <td key={day} className="p-1 text-center">
@@ -528,10 +528,10 @@ function DayColumn({
               initial={{ opacity: 0, x: -10 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, scale: 0.9 }}
-              className={`text-[12px] md:text-[11px] mb-1 p-2 md:p-1 rounded border flex justify-between items-center group transition-colors duration-300 ${isDarkMode ? 'bg-gray-800 border-gray-700 text-gray-300' : 'bg-white border-gray-100 text-gray-700'}`}
+              className={`text-[12px] md:text-[11px] mb-1 p-2 md:p-1 rounded border flex justify-between items-start gap-2 group transition-colors duration-300 ${isDarkMode ? 'bg-gray-800 border-gray-700 text-gray-300' : 'bg-white border-gray-100 text-gray-700'}`}
             >
-              <span className="truncate flex-1">{c.name}</span>
-              <div className="flex items-center gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+              <span className="break-words whitespace-normal flex-1 leading-tight">{c.name}</span>
+              <div className="flex items-center gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity shrink-0 mt-0.5">
                 <button onClick={() => editClass(day, c.id, c.name)} className="text-blue-400 hover:text-blue-500 p-1"><Pencil size={12}/></button>
                 <button onClick={() => removeClass(day, c.id)} className="text-red-400 hover:text-red-500 p-1"><Trash2 size={12}/></button>
               </div>
@@ -562,7 +562,7 @@ function DayColumn({
                 {t.completed ? <CheckSquare size={18} className="md:w-3.5 md:h-3.5" /> : <Square size={18} className="md:w-3.5 md:h-3.5" />}
               </button>
               <div className="flex-1 min-w-0">
-                <p className={`text-sm md:text-[11px] leading-tight break-words transition-colors ${t.completed ? 'line-through text-gray-500' : (isDarkMode ? 'text-gray-300' : 'text-gray-700')}`}>
+                <p className={`text-sm md:text-[11px] leading-tight break-words whitespace-normal transition-colors ${t.completed ? 'line-through text-gray-500' : (isDarkMode ? 'text-gray-300' : 'text-gray-700')}`}>
                   {t.name}
                 </p>
               </div>

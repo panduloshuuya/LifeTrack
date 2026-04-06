@@ -267,7 +267,7 @@ function Dashboard({
                     graceData.weeklySchedule[dayName].tasks.map(t => (
                       <div key={t.id} className={`flex items-center gap-2 p-2 rounded-xl border transition-colors duration-300 ${isDarkMode ? 'bg-gray-900/50 border-gray-700' : 'bg-gray-50 border-gray-100'}`}>
                         <div className={`w-1.5 h-1.5 md:w-2 md:h-2 rounded-full shrink-0 ${t.completed ? 'bg-pink-500' : 'bg-gray-300'}`} />
-                        <span className={`text-[10px] md:text-xs font-medium truncate ${t.completed ? 'line-through text-gray-500' : (isDarkMode ? 'text-gray-300' : 'text-gray-700')}`}>
+                        <span className={`text-[10px] md:text-xs font-medium break-words whitespace-normal leading-tight ${t.completed ? 'line-through text-gray-500' : (isDarkMode ? 'text-gray-300' : 'text-gray-700')}`}>
                           {t.name}
                         </span>
                       </div>
@@ -316,7 +316,7 @@ function Dashboard({
                     tangaData.weeklySchedule[dayName].tasks.map(t => (
                       <div key={t.id} className={`flex items-center gap-2 p-2 rounded-xl border transition-colors duration-300 ${isDarkMode ? 'bg-gray-900/50 border-gray-700' : 'bg-gray-50 border-gray-100'}`}>
                         <div className={`w-1.5 h-1.5 md:w-2 md:h-2 rounded-full shrink-0 ${t.completed ? 'bg-blue-500' : 'bg-gray-300'}`} />
-                        <span className={`text-[10px] md:text-xs font-medium truncate ${t.completed ? 'line-through text-gray-500' : (isDarkMode ? 'text-gray-300' : 'text-gray-700')}`}>
+                        <span className={`text-[10px] md:text-xs font-medium break-words whitespace-normal leading-tight ${t.completed ? 'line-through text-gray-500' : (isDarkMode ? 'text-gray-300' : 'text-gray-700')}`}>
                           {t.name}
                         </span>
                       </div>
@@ -356,7 +356,7 @@ function Dashboard({
                           <span className={`text-[8px] font-black uppercase tracking-widest ${a.owner === 'grace' ? 'text-pink-500' : 'text-blue-500'}`}>{a.owner}</span>
                           <span className="text-[8px] font-bold text-gray-400">{format(parseISO(a.date), 'MMM d')}</span>
                         </div>
-                        <p className={`text-[11px] font-bold truncate ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>{a.name}</p>
+                        <p className={`text-[11px] font-bold break-words whitespace-normal leading-tight ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>{a.name}</p>
                         <p className="text-[9px] text-gray-400 font-medium">{a.time}</p>
                       </div>
                     ))
