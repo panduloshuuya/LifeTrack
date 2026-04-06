@@ -147,9 +147,9 @@ export default function TaskTracker({ name, colorScheme, data, onUpdate, isDarkM
   };
 
   return (
-    <div className={`h-full w-full flex flex-col md:flex-row overflow-hidden font-sans transition-colors duration-300 ${isDarkMode ? 'bg-gray-900 text-gray-100' : 'bg-white text-gray-800'}`}>
+    <div className={`h-full w-full flex flex-col md:flex-row md:overflow-hidden overflow-y-auto font-sans transition-colors duration-300 ${isDarkMode ? 'bg-gray-900 text-gray-100' : 'bg-white text-gray-800'}`}>
       {/* Sidebar - Desktop: Left, Mobile: Top/Collapsible (simplified for mobile) */}
-      <div className={`w-full md:w-80 border-b-2 md:border-b-0 md:border-r-2 flex flex-col h-auto md:h-full transition-colors duration-300 ${isDarkMode ? 'bg-gray-800/50 border-gray-700' : 'bg-gray-50/50 border-pink-200'}`}>
+      <div className={`w-full md:w-80 border-b-2 md:border-b-0 md:border-r-2 flex flex-col h-auto md:h-full shrink-0 transition-colors duration-300 ${isDarkMode ? 'bg-gray-800/50 border-gray-700' : 'bg-gray-50/50 border-pink-200'}`}>
         {/* Weekly Planner Header */}
         <div className={`${colors.accent} text-white p-4 text-center font-bold text-lg md:text-xl uppercase tracking-widest`}>
           {name}'s Planner
@@ -201,14 +201,14 @@ export default function TaskTracker({ name, colorScheme, data, onUpdate, isDarkM
         </div>
 
         {/* Weekly Habits Section */}
-        <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="flex-none md:flex-1 flex flex-col">
           <div className={`p-2 border-b flex justify-between items-center transition-colors duration-300 ${isDarkMode ? 'bg-gray-800/80 border-gray-700' : 'bg-gray-100 border-gray-200'}`}>
             <span className={`font-bold text-xs uppercase tracking-tighter ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Weekly Habits</span>
             <button onClick={addHabit} className={`p-1 rounded transition-colors ${isDarkMode ? 'text-pink-400 hover:bg-gray-700' : 'text-pink-600 hover:bg-white'}`}>
               <Plus size={14} />
             </button>
           </div>
-          <div className="flex-1 overflow-y-auto">
+          <div className="md:flex-1 md:overflow-y-auto">
             <table className="w-full text-[10px]">
               <thead className={`sticky top-0 shadow-sm z-10 transition-colors duration-300 ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
                 <tr className={`border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-200'}`}>
@@ -259,7 +259,7 @@ export default function TaskTracker({ name, colorScheme, data, onUpdate, isDarkM
       </div>
 
       {/* Right Content Area - Desktop: Days Grid, Mobile: Selected Day View */}
-      <div className="flex-1 overflow-y-auto pb-20 md:pb-0">
+      <div className="flex-none md:flex-1 md:overflow-y-auto pb-24 md:pb-0">
         {/* Desktop View: 7-column grid */}
         <div className={`hidden md:grid grid-cols-7 h-full transition-colors duration-300 ${isDarkMode ? 'bg-gray-900' : 'bg-white'}`}>
           {DAYS.map((day, index) => (
@@ -341,7 +341,7 @@ function DayColumn({
         <span className="uppercase tracking-widest">{(day === 'Sat' || day === 'Sun') ? 'Events' : 'Classes'}</span>
         <button onClick={() => addClass(day)} className={`rounded p-1 transition-colors ${isDarkMode ? 'hover:bg-white/10' : 'hover:bg-white/50'}`}><Plus size={14}/></button>
       </div>
-      <div className={`${isMobile ? 'h-48' : 'h-40'} overflow-y-auto p-2 border-b-2 transition-colors duration-300 ${isDarkMode ? 'border-gray-800 bg-gray-900/50' : 'border-gray-200 bg-white'}`}>
+      <div className={`${isMobile ? 'min-h-[100px]' : 'h-40 overflow-y-auto'} p-2 border-b-2 transition-colors duration-300 ${isDarkMode ? 'border-gray-800 bg-gray-900/50' : 'border-gray-200 bg-white'}`}>
         <AnimatePresence>
           {data.weeklySchedule[day].classes.map(c => (
             <motion.div 
@@ -363,7 +363,7 @@ function DayColumn({
         <span className="uppercase tracking-widest">Tasks</span>
         <button onClick={() => addTask(day)} className={`rounded p-1 transition-colors ${isDarkMode ? 'hover:bg-white/10' : 'hover:bg-white/50'}`}><Plus size={14}/></button>
       </div>
-      <div className={`flex-1 overflow-y-auto p-2 transition-colors duration-300 ${isDarkMode ? 'bg-gray-900' : 'bg-white'}`}>
+      <div className={`flex-none md:flex-1 md:overflow-y-auto p-2 transition-colors duration-300 ${isDarkMode ? 'bg-gray-900' : 'bg-white'}`}>
         <AnimatePresence>
           {data.weeklySchedule[day].tasks.map(t => (
             <motion.div 

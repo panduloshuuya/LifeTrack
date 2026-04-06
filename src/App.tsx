@@ -96,7 +96,7 @@ const INITIAL_USER_DATA: UserData = {
     Sat: { classes: [], tasks: [] },
     Sun: { classes: [], tasks: [] },
   },
-  lastResetDate: startOfWeek(new Date(), { weekStartsOn: 1 }).toISOString(),
+  lastResetDate: startOfWeek(new Date(), { weekStartsOn: 6 }).toISOString(), // Reset on Saturdays
 };
 
 const INITIAL_PERIOD_DATA: PeriodData = {
@@ -375,22 +375,37 @@ function AppContent() {
     };
   }, []);
 
-  // Sunday Reset Logic
+  // Saturday Reset Logic
   useEffect(() => {
     const checkReset = () => {
       const today = startOfToday();
       const lastReset = parseISO(graceData.lastResetDate);
-      const nextReset = addDays(lastReset, 7);
+      
+      // Reset if it's Saturday and we haven't reset today yet,
+      // or if more than 7 days have passed for some reason.
+      const isSaturday = format(today, 'EEE') === 'Sat';
+      const alreadyResetToday = isSameDay(today, lastReset);
+      const daysSinceLastReset = differenceInDays(today, lastReset);
 
-      if (isAfter(today, nextReset) || isSameDay(today, nextReset)) {
+      if ((isSaturday && !alreadyResetToday) || daysSinceLastReset >= 7) {
         const resetSchedule = (data: UserData): UserData => {
           const newSchedule = { ...data.weeklySchedule };
           (Object.keys(newSchedule) as DayOfWeek[]).forEach(day => {
             newSchedule[day].tasks = []; // Clear daily tasks
           });
+
+          // Reset habit checkboxes but keep the habits themselves
+          const newHabits = data.habits.map(habit => ({
+            ...habit,
+            completed: {
+              Mon: false, Tue: false, Wed: false, Thu: false, Fri: false, Sat: false, Sun: false
+            }
+          }));
+
           return {
             ...data,
             weeklySchedule: newSchedule,
+            habits: newHabits,
             lastResetDate: today.toISOString(),
           };
         };
