@@ -436,53 +436,81 @@ function AppContent() {
     };
   }, []);
 
-  // Saturday Reset Logic
+  // Reset Logic for Grace
   useEffect(() => {
+    if (!graceData.lastResetDate) return;
+
     const checkReset = () => {
       const today = startOfToday();
       const lastReset = parseISO(graceData.lastResetDate);
-      
-      // Reset if it's Saturday and we haven't reset today yet,
-      // or if more than 7 days have passed for some reason.
       const isSaturday = format(today, 'EEE') === 'Sat';
       const alreadyResetToday = isSameDay(today, lastReset);
       const daysSinceLastReset = differenceInDays(today, lastReset);
 
       if ((isSaturday && !alreadyResetToday) || daysSinceLastReset >= 7) {
-        const resetSchedule = (data: UserData): UserData => {
-          const newSchedule = { ...data.weeklySchedule };
-          (Object.keys(newSchedule) as DayOfWeek[]).forEach(day => {
-            newSchedule[day].tasks = []; // Clear daily tasks
-          });
+        const newSchedule = { ...graceData.weeklySchedule };
+        (Object.keys(newSchedule) as DayOfWeek[]).forEach(day => {
+          newSchedule[day] = { ...newSchedule[day], tasks: [] };
+        });
 
-          // Reset habit checkboxes but keep the habits themselves
-          const newHabits = data.habits.map(habit => ({
-            ...habit,
-            completed: {
-              Sun: false, Mon: false, Tue: false, Wed: false, Thu: false, Fri: false, Sat: false
-            }
-          }));
+        const newHabits = graceData.habits.map(habit => ({
+          ...habit,
+          completed: { Sun: false, Mon: false, Tue: false, Wed: false, Thu: false, Fri: false, Sat: false }
+        }));
 
-          return {
-            ...data,
-            weeklySchedule: newSchedule,
-            habits: newHabits,
-            lastResetDate: today.toISOString(),
-          };
+        const newData = {
+          ...graceData,
+          weeklySchedule: newSchedule,
+          habits: newHabits,
+          lastResetDate: today.toISOString(),
         };
 
-        const newGrace = resetSchedule(graceData);
-        const newTanga = resetSchedule(tangaData);
-
-        setDoc(doc(db, 'trackers', 'grace'), newGrace).catch(e => handleFirestoreError(e, OperationType.WRITE, 'trackers/grace'));
-        setDoc(doc(db, 'trackers', 'tanga'), newTanga).catch(e => handleFirestoreError(e, OperationType.WRITE, 'trackers/tanga'));
+        handleUpdateGrace(newData);
       }
     };
 
     checkReset();
-    const interval = setInterval(checkReset, 1000 * 60 * 60); // Check every hour
+    const interval = setInterval(checkReset, 1000 * 60 * 60);
     return () => clearInterval(interval);
-  }, [graceData.lastResetDate]);
+  }, [graceData.lastResetDate, graceData.habits, graceData.weeklySchedule]);
+
+  // Reset Logic for Tanga
+  useEffect(() => {
+    if (!tangaData.lastResetDate) return;
+
+    const checkReset = () => {
+      const today = startOfToday();
+      const lastReset = parseISO(tangaData.lastResetDate);
+      const isSaturday = format(today, 'EEE') === 'Sat';
+      const alreadyResetToday = isSameDay(today, lastReset);
+      const daysSinceLastReset = differenceInDays(today, lastReset);
+
+      if ((isSaturday && !alreadyResetToday) || daysSinceLastReset >= 7) {
+        const newSchedule = { ...tangaData.weeklySchedule };
+        (Object.keys(newSchedule) as DayOfWeek[]).forEach(day => {
+          newSchedule[day] = { ...newSchedule[day], tasks: [] };
+        });
+
+        const newHabits = tangaData.habits.map(habit => ({
+          ...habit,
+          completed: { Sun: false, Mon: false, Tue: false, Wed: false, Thu: false, Fri: false, Sat: false }
+        }));
+
+        const newData = {
+          ...tangaData,
+          weeklySchedule: newSchedule,
+          habits: newHabits,
+          lastResetDate: today.toISOString(),
+        };
+
+        handleUpdateTanga(newData);
+      }
+    };
+
+    checkReset();
+    const interval = setInterval(checkReset, 1000 * 60 * 60);
+    return () => clearInterval(interval);
+  }, [tangaData.lastResetDate, tangaData.habits, tangaData.weeklySchedule]);
 
   const handleUpdateGrace = (newData: UserData) => {
     setGraceData(newData);
