@@ -37,6 +37,18 @@
         "cycleLength": { "type": "integer" }
       },
       "required": ["cycleLength"]
+    },
+    "ChatMessage": {
+      "title": "Chat Message",
+      "description": "A message sent in the Love Drops chat.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "text": { "type": "string" },
+        "sender": { "type": "string", "enum": ["grace", "tanga"] },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "text", "sender", "timestamp"]
     }
   },
   "firestore": {
@@ -51,6 +63,14 @@
     "/trackers/period": {
       "schema": "PeriodData",
       "description": "The shared period tracker data."
+    },
+    "/trackers/activities": {
+      "schema": "object",
+      "description": "The list of activities."
+    },
+    "/trackers/messages": {
+      "schema": "object",
+      "description": "The Love Drops chat messages list."
     }
   }
 }

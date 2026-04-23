@@ -48,9 +48,17 @@ export interface PeriodData {
   cycleLength: number; // default 28
 }
 
+export interface ChatMessage {
+  id: string;
+  text: string;
+  sender: 'grace' | 'tanga';
+  timestamp: string; // ISO string
+}
+
 export interface AppData {
   grace: UserData;
   tanga: UserData;
   period: PeriodData;
   activities: Activity[];
+  messages: ChatMessage[];
 }

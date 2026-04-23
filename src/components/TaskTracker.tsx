@@ -117,7 +117,7 @@ export default function TaskTracker({
         const newHabit: Habit = {
           id: crypto.randomUUID(),
           name: val.trim(),
-          completed: { Mon: false, Tue: false, Wed: false, Thu: false, Fri: false, Sat: false, Sun: false }
+          completed: { Sun: false, Mon: false, Tue: false, Wed: false, Thu: false, Fri: false, Sat: false }
         };
         onUpdate({ ...data, habits: [...data.habits, newHabit] });
       }
@@ -190,7 +190,10 @@ export default function TaskTracker({
         if (!val.trim()) return;
         const newClass: ClassEvent = { id: crypto.randomUUID(), name: val.trim() };
         const newSchedule = { ...data.weeklySchedule };
-        newSchedule[day].classes.push(newClass);
+        newSchedule[day] = {
+          ...newSchedule[day],
+          classes: [...newSchedule[day].classes, newClass]
+        };
         onUpdate({ ...data, weeklySchedule: newSchedule });
       }
     });
@@ -205,7 +208,10 @@ export default function TaskTracker({
         if (!val.trim()) return;
         const newTask: Task = { id: crypto.randomUUID(), name: val.trim(), completed: false };
         const newSchedule = { ...data.weeklySchedule };
-        newSchedule[day].tasks.push(newTask);
+        newSchedule[day] = {
+          ...newSchedule[day],
+          tasks: [...newSchedule[day].tasks, newTask]
+        };
         onUpdate({ ...data, weeklySchedule: newSchedule });
       }
     });

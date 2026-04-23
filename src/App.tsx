@@ -38,7 +38,8 @@ import { auth, db, googleProvider, handleFirestoreError, OperationType } from '.
 import PeriodTracker from './components/PeriodTracker';
 import TaskTracker from './components/TaskTracker';
 import Activities from './components/Activities';
-import { UserData, PeriodData, DayOfWeek, Activity } from './types';
+import LoveDrops from './components/LoveDrops';
+import { UserData, PeriodData, DayOfWeek, Activity, ChatMessage } from './types';
 
 // Error Boundary Component
 interface ErrorBoundaryProps {
@@ -106,7 +107,7 @@ const INITIAL_PERIOD_DATA: PeriodData = {
   cycleLength: 28,
 };
 
-type Page = 'dashboard' | 'period' | 'grace' | 'tanga' | 'activities';
+type Page = 'dashboard' | 'period' | 'grace' | 'tanga' | 'activities' | 'love-drops';
 
 function Dashboard({ 
   graceData, 
@@ -382,6 +383,7 @@ function AppContent() {
   const [tangaData, setTangaData] = useState<UserData>(INITIAL_USER_DATA);
   const [periodData, setPeriodData] = useState<PeriodData>(INITIAL_PERIOD_DATA);
   const [activities, setActivities] = useState<Activity[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [highlightDate, setHighlightDate] = useState<string | null>(null);
 
   useEffect(() => {
@@ -428,15 +430,52 @@ function AppContent() {
       }
     }, (e) => handleFirestoreError(e, OperationType.GET, 'trackers/activities'));
 
+    const unsubMessages = onSnapshot(doc(db, 'trackers', 'messages'), (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.data();
+        setMessages(data.list || []);
+      } else {
+        setDoc(doc(db, 'trackers', 'messages'), { list: [] }).catch(e => handleFirestoreError(e, OperationType.WRITE, 'trackers/messages'));
+      }
+    }, (e) => handleFirestoreError(e, OperationType.GET, 'trackers/messages'));
+
     return () => {
       unsubGrace();
       unsubTanga();
       unsubPeriod();
       unsubActivities();
+      unsubMessages();
     };
   }, []);
 
-  // Reset Logic for Grace
+  // Wednesday Reset Logic - Helper to clear tasks/checkboxes while keeping classes/habits
+  const getResetData = (data: UserData): UserData => {
+    // 1. Reset Weekly Schedule: Clear tasks, preserve classes
+    const newSchedule = { ...data.weeklySchedule };
+    (Object.keys(newSchedule) as DayOfWeek[]).forEach((day) => {
+      newSchedule[day] = {
+        ...newSchedule[day],
+        tasks: [], // We only clear tasks as requested
+      };
+    });
+
+    // 2. Reset Habits: Clear daily checkboxes, preserve habit names
+    const newHabits = data.habits.map((habit) => ({
+      ...habit,
+      completed: {
+        Sun: false, Mon: false, Tue: false, Wed: false, Thu: false, Fri: false, Sat: false
+      },
+    }));
+
+    return {
+      ...data,
+      weeklySchedule: newSchedule,
+      habits: newHabits,
+      lastResetDate: startOfToday().toISOString(),
+    };
+  };
+
+  // Reset Monitor for Grace
   useEffect(() => {
     if (!graceData.lastResetDate) return;
 
@@ -448,24 +487,7 @@ function AppContent() {
       const daysSinceLastReset = differenceInDays(today, lastReset);
 
       if ((isSaturday && !alreadyResetToday) || daysSinceLastReset >= 7) {
-        const newSchedule = { ...graceData.weeklySchedule };
-        (Object.keys(newSchedule) as DayOfWeek[]).forEach(day => {
-          newSchedule[day] = { ...newSchedule[day], tasks: [] };
-        });
-
-        const newHabits = graceData.habits.map(habit => ({
-          ...habit,
-          completed: { Sun: false, Mon: false, Tue: false, Wed: false, Thu: false, Fri: false, Sat: false }
-        }));
-
-        const newData = {
-          ...graceData,
-          weeklySchedule: newSchedule,
-          habits: newHabits,
-          lastResetDate: today.toISOString(),
-        };
-
-        handleUpdateGrace(newData);
+        handleUpdateGrace(getResetData(graceData));
       }
     };
 
@@ -474,7 +496,7 @@ function AppContent() {
     return () => clearInterval(interval);
   }, [graceData.lastResetDate, graceData.habits, graceData.weeklySchedule]);
 
-  // Reset Logic for Tanga
+  // Reset Monitor for Tanga
   useEffect(() => {
     if (!tangaData.lastResetDate) return;
 
@@ -486,24 +508,7 @@ function AppContent() {
       const daysSinceLastReset = differenceInDays(today, lastReset);
 
       if ((isSaturday && !alreadyResetToday) || daysSinceLastReset >= 7) {
-        const newSchedule = { ...tangaData.weeklySchedule };
-        (Object.keys(newSchedule) as DayOfWeek[]).forEach(day => {
-          newSchedule[day] = { ...newSchedule[day], tasks: [] };
-        });
-
-        const newHabits = tangaData.habits.map(habit => ({
-          ...habit,
-          completed: { Sun: false, Mon: false, Tue: false, Wed: false, Thu: false, Fri: false, Sat: false }
-        }));
-
-        const newData = {
-          ...tangaData,
-          weeklySchedule: newSchedule,
-          habits: newHabits,
-          lastResetDate: today.toISOString(),
-        };
-
-        handleUpdateTanga(newData);
+        handleUpdateTanga(getResetData(tangaData));
       }
     };
 
@@ -531,6 +536,24 @@ function AppContent() {
   const handleUpdateActivities = (newActivities: Activity[]) => {
     setActivities(newActivities);
     setDoc(doc(db, 'trackers', 'activities'), { list: newActivities }).catch(e => handleFirestoreError(e, OperationType.WRITE, 'trackers/activities'));
+  };
+
+  const handleSendMessage = (text: string, sender: 'grace' | 'tanga') => {
+    const newMessage: ChatMessage = {
+      id: crypto.randomUUID(),
+      text,
+      sender,
+      timestamp: new Date().toISOString(),
+    };
+    const newMessages = [...messages, newMessage];
+    setMessages(newMessages);
+    setDoc(doc(db, 'trackers', 'messages'), { list: newMessages }).catch(e => handleFirestoreError(e, OperationType.WRITE, 'trackers/messages'));
+  };
+
+  const handleDeleteMessage = (id: string) => {
+    const newMessages = messages.filter(m => m.id !== id);
+    setMessages(newMessages);
+    setDoc(doc(db, 'trackers', 'messages'), { list: newMessages }).catch(e => handleFirestoreError(e, OperationType.WRITE, 'trackers/messages'));
   };
 
   const handleActivityClick = (date: string) => {
@@ -600,6 +623,16 @@ function AppContent() {
             <Calendar size={18} />
             Activities
           </button>
+          <button
+            onClick={() => setActivePage('love-drops')}
+            className={`
+              flex items-center gap-2 px-4 py-2 rounded-lg transition-all text-sm font-bold
+              ${activePage === 'love-drops' ? (isDarkMode ? 'bg-gray-800 shadow-sm text-pink-400' : 'bg-white shadow-sm text-pink-600') : 'text-gray-500 hover:text-gray-700'}
+            `}
+          >
+            <Heart size={18} />
+            Love Drops
+          </button>
         </div>
 
         <div className="flex items-center gap-4">
@@ -652,6 +685,13 @@ function AppContent() {
         >
           <Calendar size={24} />
           <span className="text-[10px] font-bold uppercase tracking-tighter">Events</span>
+        </button>
+        <button
+          onClick={() => setActivePage('love-drops')}
+          className={`flex flex-col items-center gap-1 transition-all ${activePage === 'love-drops' ? 'text-pink-500' : 'text-gray-400'}`}
+        >
+          <Heart size={24} className={activePage === 'love-drops' ? 'fill-pink-500' : ''} />
+          <span className="text-[10px] font-bold uppercase tracking-tighter">Love</span>
         </button>
         <button
           onClick={() => setIsDarkMode(!isDarkMode)}
@@ -754,6 +794,22 @@ function AppContent() {
                 isDarkMode={isDarkMode}
                 activities={activities}
                 onActivityClick={handleActivityClick}
+              />
+            </motion.div>
+          )}
+          {activePage === 'love-drops' && (
+            <motion.div
+              key="love-drops"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 1.05 }}
+              className="absolute inset-0"
+            >
+              <LoveDrops 
+                messages={messages}
+                onSendMessage={handleSendMessage}
+                onDeleteMessage={handleDeleteMessage}
+                isDarkMode={isDarkMode}
               />
             </motion.div>
           )}
