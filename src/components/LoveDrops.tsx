@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, User, Trash2, Heart } from 'lucide-react';
+import { Send, User, Trash2, MessageSquare } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ChatMessage } from '../types';
 import { format, parseISO } from 'date-fns';
@@ -41,11 +41,11 @@ export default function LoveDrops({ messages, onSendMessage, onDeleteMessage, is
       <header className={`p-4 md:p-6 border-b flex items-center justify-between transition-colors duration-300 ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
         <div>
           <h2 className="text-xl md:text-2xl font-black uppercase tracking-tighter flex items-center gap-2">
-            <Heart size={24} className="text-pink-500 fill-pink-500" />
-            Love Drops
+            <MessageSquare size={24} className="text-pink-500 fill-pink-500" />
+            ChatDesk
             <span className="text-pink-500 text-xs lowercase animate-pulse">● live</span>
           </h2>
-          <p className={`text-[10px] font-bold uppercase tracking-widest ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>Grace & Tanga's Little Notes</p>
+          <p className={`text-[10px] font-bold uppercase tracking-widest ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>Accountability pit stop. Check in here</p>
         </div>
       </header>
 
@@ -54,7 +54,7 @@ export default function LoveDrops({ messages, onSendMessage, onDeleteMessage, is
         {messages.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center opacity-30">
             <User size={48} className="mb-2" />
-            <p className="text-sm font-bold uppercase tracking-widest text-center">No drops yet.<br/>Send a little love.</p>
+            <p className="text-sm font-bold uppercase tracking-widest text-center">No messages yet.<br/>Start a conversation.</p>
           </div>
         ) : (
           messages.map((msg) => (
@@ -101,7 +101,7 @@ export default function LoveDrops({ messages, onSendMessage, onDeleteMessage, is
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleSendClick()}
-            placeholder="Type a love drop..."
+            placeholder="Type a message..."
             className={`flex-1 p-3 md:p-4 rounded-2xl border-2 outline-none transition-all ${
               isDarkMode 
                 ? 'bg-gray-900 border-gray-700 text-white focus:border-pink-500' 

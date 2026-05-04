@@ -22,6 +22,7 @@ import {
   Users, 
   Calendar, 
   Heart, 
+  MessageSquare,
   LayoutDashboard,
   Settings,
   LogIn,
@@ -159,19 +160,19 @@ function Dashboard({
 
     if (cycleDay < periodDuration) return { 
       name: 'Menstrual', 
-      advice: 'Grace is on her period. Extra snacks and comfort needed!' 
+      advice: 'Rest & reflect. Low oestrogen reduces your stress tolerance. Reduce intense decisions, journal, and prioritize sleep to avoid overwhelm.' 
     };
     if (cycleDay < 12) return { 
       name: 'Follicular', 
-      advice: 'Grace is feeling more energetic. Plan a fun activity!' 
+      advice: 'Initiate new projects or social plans. Rising oestrogen boosts optimism and resilience. Use this mood uplift to connect with others or start something fresh.' 
     };
     if (cycleDay < 16) return { 
       name: 'Ovulation', 
-      advice: 'Grace is at her most social and vibrant phase!' 
+      advice: 'Set boundaries with ease. Peak oestrogen & oxytocin increase empathy but also people-pleasing. Practice saying "no" calmly because your confidence is naturally higher.' 
     };
     return { 
       name: 'Luteal', 
-      advice: 'Grace might be feeling sensitive. Patience and kindness go a long way.' 
+      advice: 'Lower expectations & use calming routines. Progesterone heightens emotional sensitivity and irritability. Cancel non-essential obligations, try magnesium or chamomile, and remind yourself it\'s biological, not a personal failure.' 
     };
   };
 
@@ -183,7 +184,7 @@ function Dashboard({
         <header className="flex flex-col md:flex-row md:items-center justify-between gap-2 md:gap-4">
           <div>
             <h2 className={`text-2xl md:text-4xl font-black uppercase tracking-tighter leading-none ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>LifeTrack Hub</h2>
-            <p className={`text-[10px] md:text-base font-medium italic mt-0.5 md:mt-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>"Doing all we can in love and support of one another."</p>
+            <p className={`text-[10px] md:text-base font-medium italic mt-0.5 md:mt-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>"Habit and Task accountability tracker. Let's strive for Godly excellence!"</p>
           </div>
           <div className="flex md:block items-center justify-between bg-purple-500/10 md:bg-transparent p-2 md:p-0 rounded-xl">
             <p className="text-[10px] font-black text-purple-500 uppercase tracking-widest">{format(today, 'EEEE')}</p>
@@ -630,8 +631,8 @@ function AppContent() {
               ${activePage === 'love-drops' ? (isDarkMode ? 'bg-gray-800 shadow-sm text-pink-400' : 'bg-white shadow-sm text-pink-600') : 'text-gray-500 hover:text-gray-700'}
             `}
           >
-            <Heart size={18} />
-            Love Drops
+            <MessageSquare size={18} />
+            ChatDesk
           </button>
         </div>
 
@@ -690,8 +691,8 @@ function AppContent() {
           onClick={() => setActivePage('love-drops')}
           className={`flex flex-col items-center gap-1 transition-all ${activePage === 'love-drops' ? 'text-pink-500' : 'text-gray-400'}`}
         >
-          <Heart size={24} className={activePage === 'love-drops' ? 'fill-pink-500' : ''} />
-          <span className="text-[10px] font-bold uppercase tracking-tighter">Love</span>
+          <MessageSquare size={24} className={activePage === 'love-drops' ? 'fill-pink-500' : ''} />
+          <span className="text-[10px] font-bold uppercase tracking-tighter">ChatDesk</span>
         </button>
         <button
           onClick={() => setIsDarkMode(!isDarkMode)}

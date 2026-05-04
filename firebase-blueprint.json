@@ -40,7 +40,7 @@
     },
     "ChatMessage": {
       "title": "Chat Message",
-      "description": "A message sent in the Love Drops chat.",
+      "description": "A message sent in the ChatDesk chat.",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
@@ -70,7 +70,7 @@
     },
     "/trackers/messages": {
       "schema": "object",
-      "description": "The Love Drops chat messages list."
+      "description": "The ChatDesk chat messages list."
     }
   }
 }
