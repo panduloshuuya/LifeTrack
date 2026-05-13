@@ -284,10 +284,9 @@ export default function TaskTracker({
               </div>
               <button 
                 onClick={() => onUpdate({ ...data, hasNewMessage: false })}
-                className="flex items-center gap-1.5 px-4 py-2 bg-white text-red-600 hover:bg-red-50 rounded-xl transition-all shadow-sm active:scale-95 font-black text-[10px] uppercase tracking-tighter"
+                className="p-1 bg-white text-red-600 hover:bg-red-50 rounded-lg transition-all shadow-sm active:scale-95 flex items-center justify-center"
               >
-                <Check size={14} strokeWidth={3} />
-                RESOLVE
+                <Check size={14} strokeWidth={4} />
               </button>
             </motion.div>
           )}

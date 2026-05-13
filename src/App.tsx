@@ -270,10 +270,9 @@ function Dashboard({
                   </div>
                   <button 
                     onClick={() => onUpdateGrace({ ...graceData, hasNewMessage: false })}
-                    className="flex items-center gap-1 px-3 py-1.5 bg-white text-red-600 hover:bg-red-50 rounded-xl transition-all shadow-sm active:scale-95"
+                    className="p-1 bg-white text-red-600 hover:bg-red-50 rounded-lg transition-all shadow-sm active:scale-95 flex items-center justify-center"
                   >
-                    <Check size={12} strokeWidth={3} />
-                    <span className="text-[10px] font-black uppercase">Dismiss</span>
+                    <Check size={11} strokeWidth={4} />
                   </button>
                 </motion.div>
               )}
@@ -339,10 +338,9 @@ function Dashboard({
                   </div>
                   <button 
                     onClick={() => onUpdateTanga({ ...tangaData, hasNewMessage: false })}
-                    className="flex items-center gap-1 px-3 py-1.5 bg-white text-red-600 hover:bg-red-50 rounded-xl transition-all shadow-sm active:scale-95"
+                    className="p-1 bg-white text-red-600 hover:bg-red-50 rounded-lg transition-all shadow-sm active:scale-95 flex items-center justify-center"
                   >
-                    <Check size={12} strokeWidth={3} />
-                    <span className="text-[10px] font-black uppercase">Dismiss</span>
+                    <Check size={11} strokeWidth={4} />
                   </button>
                 </motion.div>
               )}
