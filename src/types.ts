@@ -40,6 +40,7 @@ export interface UserData {
   habits: Habit[];
   weeklySchedule: Record<DayOfWeek, DayData>;
   lastResetDate: string; // ISO string to check for Sunday reset
+  hasNewMessage?: boolean;
 }
 
 export interface PeriodData {

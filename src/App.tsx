@@ -29,6 +29,7 @@ import {
   LogOut,
   Loader2,
   Bell,
+  Check,
   Sun,
   Moon
 } from 'lucide-react';
@@ -100,6 +101,7 @@ const INITIAL_USER_DATA: UserData = {
     Sat: { classes: [], tasks: [] },
   },
   lastResetDate: startOfWeek(new Date(), { weekStartsOn: 6 }).toISOString(), // Reset on Saturdays
+  hasNewMessage: false,
 };
 
 const INITIAL_PERIOD_DATA: PeriodData = {
@@ -115,13 +117,17 @@ function Dashboard({
   tangaData, 
   periodData,
   activities,
-  isDarkMode
+  isDarkMode,
+  onUpdateGrace,
+  onUpdateTanga
 }: { 
   graceData: UserData, 
   tangaData: UserData, 
   periodData: PeriodData,
   activities: Activity[],
-  isDarkMode: boolean
+  isDarkMode: boolean,
+  onUpdateGrace: (data: UserData) => void,
+  onUpdateTanga: (data: UserData) => void
 }) {
   const today = startOfToday();
   const dayName = format(today, 'EEE') as DayOfWeek;
@@ -252,6 +258,26 @@ function Dashboard({
                 </div>
               </div>
 
+              {graceData.hasNewMessage && (
+                <motion.div 
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="mb-4 p-2.5 bg-red-600 text-white rounded-2xl flex items-center justify-between gap-2 shadow-lg shadow-red-600/30"
+                >
+                  <div className="flex items-center gap-2 pl-1">
+                    <Bell size={14} className="animate-bounce" />
+                    <span className="text-[9px] font-black uppercase tracking-widest">New ChatDesk Message!</span>
+                  </div>
+                  <button 
+                    onClick={() => onUpdateGrace({ ...graceData, hasNewMessage: false })}
+                    className="flex items-center gap-1 px-3 py-1.5 bg-white text-red-600 hover:bg-red-50 rounded-xl transition-all shadow-sm active:scale-95"
+                  >
+                    <Check size={12} strokeWidth={3} />
+                    <span className="text-[10px] font-black uppercase">Dismiss</span>
+                  </button>
+                </motion.div>
+              )}
+
               <div className={`w-full h-1.5 md:h-2 rounded-full overflow-hidden mb-4 md:mb-6 ${isDarkMode ? 'bg-gray-700' : 'bg-gray-100'}`}>
                 <motion.div 
                   initial={{ width: 0 }}
@@ -300,6 +326,26 @@ function Dashboard({
                   <p className="text-[8px] md:text-[10px] font-bold text-gray-400 uppercase">Weekly</p>
                 </div>
               </div>
+
+              {tangaData.hasNewMessage && (
+                <motion.div 
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="mb-4 p-2.5 bg-red-600 text-white rounded-2xl flex items-center justify-between gap-2 shadow-lg shadow-red-600/30"
+                >
+                  <div className="flex items-center gap-2 pl-1">
+                    <Bell size={14} className="animate-bounce" />
+                    <span className="text-[9px] font-black uppercase tracking-widest">New ChatDesk Message!</span>
+                  </div>
+                  <button 
+                    onClick={() => onUpdateTanga({ ...tangaData, hasNewMessage: false })}
+                    className="flex items-center gap-1 px-3 py-1.5 bg-white text-red-600 hover:bg-red-50 rounded-xl transition-all shadow-sm active:scale-95"
+                  >
+                    <Check size={12} strokeWidth={3} />
+                    <span className="text-[10px] font-black uppercase">Dismiss</span>
+                  </button>
+                </motion.div>
+              )}
 
               <div className={`w-full h-1.5 md:h-2 rounded-full overflow-hidden mb-4 md:mb-6 ${isDarkMode ? 'bg-gray-700' : 'bg-gray-100'}`}>
                 <motion.div 
@@ -549,6 +595,17 @@ function AppContent() {
     const newMessages = [...messages, newMessage];
     setMessages(newMessages);
     setDoc(doc(db, 'trackers', 'messages'), { list: newMessages }).catch(e => handleFirestoreError(e, OperationType.WRITE, 'trackers/messages'));
+
+    // Notify the other user
+    if (sender === 'grace') {
+      const newTangaData = { ...tangaData, hasNewMessage: true };
+      setTangaData(newTangaData);
+      setDoc(doc(db, 'trackers', 'tanga'), newTangaData).catch(e => handleFirestoreError(e, OperationType.WRITE, 'trackers/tanga'));
+    } else {
+      const newGraceData = { ...graceData, hasNewMessage: true };
+      setGraceData(newGraceData);
+      setDoc(doc(db, 'trackers', 'grace'), newGraceData).catch(e => handleFirestoreError(e, OperationType.WRITE, 'trackers/grace'));
+    }
   };
 
   const handleDeleteMessage = (id: string) => {
@@ -720,6 +777,8 @@ function AppContent() {
                 periodData={periodData}
                 activities={activities}
                 isDarkMode={isDarkMode}
+                onUpdateGrace={handleUpdateGrace}
+                onUpdateTanga={handleUpdateTanga}
               />
             </motion.div>
           )}

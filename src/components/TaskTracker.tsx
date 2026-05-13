@@ -25,7 +25,9 @@ import {
   LayoutGrid,
   ChevronLeft,
   ChevronRight,
-  Pencil
+  Pencil,
+  Bell,
+  Check
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { UserData, DayOfWeek, Habit, Task, ClassEvent, Activity } from '../types';
@@ -266,6 +268,30 @@ export default function TaskTracker({
             </button>
           ))}
         </div>
+
+        {/* New Message Notification */}
+        <AnimatePresence>
+          {data.hasNewMessage && (
+            <motion.div 
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              className="px-4 py-3 bg-red-600 text-white flex items-center justify-between gap-3 shadow-md overflow-hidden"
+            >
+              <div className="flex items-center gap-2">
+                <Bell size={18} className="animate-bounce" />
+                <span className="text-[10px] md:text-xs font-black uppercase tracking-widest whitespace-nowrap">New ChatDesk Message!</span>
+              </div>
+              <button 
+                onClick={() => onUpdate({ ...data, hasNewMessage: false })}
+                className="flex items-center gap-1.5 px-4 py-2 bg-white text-red-600 hover:bg-red-50 rounded-xl transition-all shadow-sm active:scale-95 font-black text-[10px] uppercase tracking-tighter"
+              >
+                <Check size={14} strokeWidth={3} />
+                RESOLVE
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Calendar Section - Hidden on mobile to save space, or can be made collapsible */}
         <div className={`hidden md:block p-4 border-b-2 transition-colors duration-300 ${isDarkMode ? 'border-gray-700 bg-gray-800/30' : 'border-gray-200 bg-white'}`}>
