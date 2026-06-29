@@ -132,9 +132,9 @@ export default function Activities({
   };
 
   return (
-    <div className={`h-full w-full flex flex-col md:flex-row font-sans transition-colors duration-300 ${isDarkMode ? 'bg-gray-900 text-gray-100' : 'bg-white text-gray-800'}`}>
+    <div className={`h-full w-full flex flex-col-reverse md:flex-row overflow-y-auto md:overflow-hidden font-sans transition-colors duration-300 ${isDarkMode ? 'bg-gray-900 text-gray-100' : 'bg-white text-gray-800'}`}>
       {/* Sidebar: Upcoming Activities */}
-      <div className={`w-full md:w-80 border-b md:border-b-0 md:border-r flex flex-col h-auto md:h-full shrink-0 transition-colors duration-300 ${isDarkMode ? 'bg-gray-800/50 border-gray-700' : 'bg-gray-50/50 border-gray-200'}`}>
+      <div className={`w-full md:w-80 border-t md:border-t-0 md:border-r flex flex-col h-auto md:h-full shrink-0 transition-colors duration-300 ${isDarkMode ? 'bg-gray-800/50 border-gray-700' : 'bg-gray-50/50 border-gray-200'}`}>
         <div className="p-6 border-b border-gray-200 dark:border-gray-700">
           <h2 className="text-xl font-black uppercase tracking-widest flex items-center gap-2">
             <Clock size={20} />
@@ -186,7 +186,7 @@ export default function Activities({
       </div>
 
       {/* Main Content: Monthly Calendar */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 flex flex-col shrink-0 md:overflow-hidden">
         <header className="p-4 md:p-6 flex items-center justify-between border-b border-gray-200 dark:border-gray-700">
           <div className="flex items-center gap-4">
             <h2 className="text-2xl font-black uppercase tracking-tighter">
@@ -209,7 +209,7 @@ export default function Activities({
           </button>
         </header>
 
-        <div className="flex-1 overflow-y-auto p-4">
+        <div className="flex-1 md:overflow-y-auto p-4">
           <div className="grid grid-cols-7 gap-2 md:gap-4 md:h-full">
             {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
               <div key={day} className="text-center text-[10px] font-black uppercase tracking-widest text-gray-400 py-2">

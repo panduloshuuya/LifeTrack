@@ -35,7 +35,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { onAuthStateChanged, signInWithPopup, signOut, User as FirebaseUser } from 'firebase/auth';
 import { doc, onSnapshot, setDoc } from 'firebase/firestore';
-import { auth, db, googleProvider, handleFirestoreError, OperationType } from './firebase';
+import { auth, db, googleProvider, handleFirestoreError, OperationType, isFirebaseConfigured } from './firebase';
 import TaskTracker from './components/TaskTracker';
 import Activities from './components/Activities';
 import LoveDrops from './components/LoveDrops';
@@ -354,11 +354,26 @@ function AppContent() {
     return saved ? JSON.parse(saved) : false;
   });
   
-  const [graceData, setGraceData] = useState<UserData>(INITIAL_USER_DATA);
-  const [railiData, setRailiData] = useState<UserData>(INITIAL_USER_DATA);
-  const [periodData, setPeriodData] = useState<PeriodData>(INITIAL_PERIOD_DATA);
-  const [activities, setActivities] = useState<Activity[]>([]);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [graceData, setGraceData] = useState<UserData>(() => {
+    const saved = localStorage.getItem('tracker_grace');
+    return saved ? JSON.parse(saved) : INITIAL_USER_DATA;
+  });
+  const [railiData, setRailiData] = useState<UserData>(() => {
+    const saved = localStorage.getItem('tracker_raili');
+    return saved ? JSON.parse(saved) : INITIAL_USER_DATA;
+  });
+  const [periodData, setPeriodData] = useState<PeriodData>(() => {
+    const saved = localStorage.getItem('tracker_period');
+    return saved ? JSON.parse(saved) : INITIAL_PERIOD_DATA;
+  });
+  const [activities, setActivities] = useState<Activity[]>(() => {
+    const saved = localStorage.getItem('tracker_activities');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [messages, setMessages] = useState<ChatMessage[]>(() => {
+    const saved = localStorage.getItem('tracker_messages');
+    return saved ? JSON.parse(saved) : [];
+  });
   const [highlightDate, setHighlightDate] = useState<string | null>(null);
 
   useEffect(() => {
@@ -370,11 +385,15 @@ function AppContent() {
     }
   }, [isDarkMode]);
 
-  // Firestore Real-time Sync - Public Access
+  // Firestore Real-time Sync - Public Access (only runs if Firebase is configured)
   useEffect(() => {
+    if (!isFirebaseConfigured) return;
+
     const unsubGrace = onSnapshot(doc(db, 'trackers', 'grace'), (snapshot) => {
       if (snapshot.exists()) {
-        setGraceData(snapshot.data() as UserData);
+        const data = snapshot.data() as UserData;
+        setGraceData(data);
+        localStorage.setItem('tracker_grace', JSON.stringify(data));
       } else {
         setDoc(doc(db, 'trackers', 'grace'), INITIAL_USER_DATA).catch(e => handleFirestoreError(e, OperationType.WRITE, 'trackers/grace'));
       }
@@ -382,7 +401,9 @@ function AppContent() {
 
     const unsubRaili = onSnapshot(doc(db, 'trackers', 'raili'), (snapshot) => {
       if (snapshot.exists()) {
-        setRailiData(snapshot.data() as UserData);
+        const data = snapshot.data() as UserData;
+        setRailiData(data);
+        localStorage.setItem('tracker_raili', JSON.stringify(data));
       } else {
         setDoc(doc(db, 'trackers', 'raili'), INITIAL_USER_DATA).catch(e => handleFirestoreError(e, OperationType.WRITE, 'trackers/raili'));
       }
@@ -390,7 +411,9 @@ function AppContent() {
 
     const unsubPeriod = onSnapshot(doc(db, 'trackers', 'period'), (snapshot) => {
       if (snapshot.exists()) {
-        setPeriodData(snapshot.data() as PeriodData);
+        const data = snapshot.data() as PeriodData;
+        setPeriodData(data);
+        localStorage.setItem('tracker_period', JSON.stringify(data));
       } else {
         setDoc(doc(db, 'trackers', 'period'), INITIAL_PERIOD_DATA).catch(e => handleFirestoreError(e, OperationType.WRITE, 'trackers/period'));
       }
@@ -399,7 +422,9 @@ function AppContent() {
     const unsubActivities = onSnapshot(doc(db, 'trackers', 'activities'), (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.data();
-        setActivities(data.list || []);
+        const list = data.list || [];
+        setActivities(list);
+        localStorage.setItem('tracker_activities', JSON.stringify(list));
       } else {
         setDoc(doc(db, 'trackers', 'activities'), { list: [] }).catch(e => handleFirestoreError(e, OperationType.WRITE, 'trackers/activities'));
       }
@@ -408,7 +433,9 @@ function AppContent() {
     const unsubMessages = onSnapshot(doc(db, 'trackers', 'messages'), (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.data();
-        setMessages(data.list || []);
+        const list = data.list || [];
+        setMessages(list);
+        localStorage.setItem('tracker_messages', JSON.stringify(list));
       } else {
         setDoc(doc(db, 'trackers', 'messages'), { list: [] }).catch(e => handleFirestoreError(e, OperationType.WRITE, 'trackers/messages'));
       }
@@ -494,23 +521,35 @@ function AppContent() {
 
   const handleUpdateGrace = (newData: UserData) => {
     setGraceData(newData);
-    setDoc(doc(db, 'trackers', 'grace'), newData).catch(e => handleFirestoreError(e, OperationType.WRITE, 'trackers/grace'));
+    localStorage.setItem('tracker_grace', JSON.stringify(newData));
+    if (isFirebaseConfigured) {
+      setDoc(doc(db, 'trackers', 'grace'), newData).catch(e => handleFirestoreError(e, OperationType.WRITE, 'trackers/grace'));
+    }
   };
 
   const handleUpdateRaili = (newData: UserData) => {
     setRailiData(newData);
-    setDoc(doc(db, 'trackers', 'raili'), newData).catch(e => handleFirestoreError(e, OperationType.WRITE, 'trackers/raili'));
+    localStorage.setItem('tracker_raili', JSON.stringify(newData));
+    if (isFirebaseConfigured) {
+      setDoc(doc(db, 'trackers', 'raili'), newData).catch(e => handleFirestoreError(e, OperationType.WRITE, 'trackers/raili'));
+    }
   };
 
   const handleUpdatePeriod = (start: string | null, end: string | null) => {
     const newData = { ...periodData, startDate: start, endDate: end };
     setPeriodData(newData);
-    setDoc(doc(db, 'trackers', 'period'), newData).catch(e => handleFirestoreError(e, OperationType.WRITE, 'trackers/period'));
+    localStorage.setItem('tracker_period', JSON.stringify(newData));
+    if (isFirebaseConfigured) {
+      setDoc(doc(db, 'trackers', 'period'), newData).catch(e => handleFirestoreError(e, OperationType.WRITE, 'trackers/period'));
+    }
   };
 
   const handleUpdateActivities = (newActivities: Activity[]) => {
     setActivities(newActivities);
-    setDoc(doc(db, 'trackers', 'activities'), { list: newActivities }).catch(e => handleFirestoreError(e, OperationType.WRITE, 'trackers/activities'));
+    localStorage.setItem('tracker_activities', JSON.stringify(newActivities));
+    if (isFirebaseConfigured) {
+      setDoc(doc(db, 'trackers', 'activities'), { list: newActivities }).catch(e => handleFirestoreError(e, OperationType.WRITE, 'trackers/activities'));
+    }
   };
 
   const handleSendMessage = (text: string, sender: 'grace' | 'raili') => {
@@ -522,24 +561,36 @@ function AppContent() {
     };
     const newMessages = [...messages, newMessage];
     setMessages(newMessages);
-    setDoc(doc(db, 'trackers', 'messages'), { list: newMessages }).catch(e => handleFirestoreError(e, OperationType.WRITE, 'trackers/messages'));
+    localStorage.setItem('tracker_messages', JSON.stringify(newMessages));
+    if (isFirebaseConfigured) {
+      setDoc(doc(db, 'trackers', 'messages'), { list: newMessages }).catch(e => handleFirestoreError(e, OperationType.WRITE, 'trackers/messages'));
+    }
 
     // Notify the other user
     if (sender === 'grace') {
       const newRailiData = { ...railiData, hasNewMessage: true };
       setRailiData(newRailiData);
-      setDoc(doc(db, 'trackers', 'raili'), newRailiData).catch(e => handleFirestoreError(e, OperationType.WRITE, 'trackers/raili'));
+      localStorage.setItem('tracker_raili', JSON.stringify(newRailiData));
+      if (isFirebaseConfigured) {
+        setDoc(doc(db, 'trackers', 'raili'), newRailiData).catch(e => handleFirestoreError(e, OperationType.WRITE, 'trackers/raili'));
+      }
     } else {
       const newGraceData = { ...graceData, hasNewMessage: true };
       setGraceData(newGraceData);
-      setDoc(doc(db, 'trackers', 'grace'), newGraceData).catch(e => handleFirestoreError(e, OperationType.WRITE, 'trackers/grace'));
+      localStorage.setItem('tracker_grace', JSON.stringify(newGraceData));
+      if (isFirebaseConfigured) {
+        setDoc(doc(db, 'trackers', 'grace'), newGraceData).catch(e => handleFirestoreError(e, OperationType.WRITE, 'trackers/grace'));
+      }
     }
   };
 
   const handleDeleteMessage = (id: string) => {
     const newMessages = messages.filter(m => m.id !== id);
     setMessages(newMessages);
-    setDoc(doc(db, 'trackers', 'messages'), { list: newMessages }).catch(e => handleFirestoreError(e, OperationType.WRITE, 'trackers/messages'));
+    localStorage.setItem('tracker_messages', JSON.stringify(newMessages));
+    if (isFirebaseConfigured) {
+      setDoc(doc(db, 'trackers', 'messages'), { list: newMessages }).catch(e => handleFirestoreError(e, OperationType.WRITE, 'trackers/messages'));
+    }
   };
 
   const handleActivityClick = (date: string) => {
@@ -626,7 +677,7 @@ function AppContent() {
       </nav>
 
       {/* Page Content */}
-      <main className="flex-1 relative overflow-hidden pb-[72px] md:pb-0">
+      <main className="flex-1 relative overflow-hidden">
         <AnimatePresence mode="wait">
           {activePage === 'dashboard' && (
             <motion.div
@@ -634,7 +685,7 @@ function AppContent() {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 1.05 }}
-              className="absolute inset-0"
+              className="absolute inset-x-0 top-0 bottom-[72px] md:bottom-0"
             >
               <Dashboard 
                 graceData={graceData}
@@ -653,7 +704,7 @@ function AppContent() {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 1.05 }}
-              className="absolute inset-0"
+              className="absolute inset-x-0 top-0 bottom-[72px] md:bottom-0"
             >
               <Activities 
                 activities={activities}
@@ -671,7 +722,7 @@ function AppContent() {
               initial={{ opacity: 0, scale: 0.98 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 1.02 }}
-              className="absolute inset-0"
+              className="absolute inset-x-0 top-0 bottom-[72px] md:bottom-0"
             >
               <TaskTracker 
                 name="Grace"
@@ -691,7 +742,7 @@ function AppContent() {
               initial={{ opacity: 0, scale: 0.98 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 1.02 }}
-              className="absolute inset-0"
+              className="absolute inset-x-0 top-0 bottom-[72px] md:bottom-0"
             >
               <TaskTracker 
                 name="Raili"
@@ -710,7 +761,7 @@ function AppContent() {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 1.05 }}
-              className="absolute inset-0"
+              className="absolute inset-x-0 top-0 bottom-[72px] md:bottom-0"
             >
               <LoveDrops 
                 messages={messages}

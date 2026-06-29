@@ -32,6 +32,13 @@ if (missingVars.length > 0 && import.meta.env.PROD) {
   console.error('Missing Firebase environment variables:', missingVars);
 }
 
+export const isFirebaseConfigured = !!(
+  firebaseConfig.apiKey &&
+  firebaseConfig.projectId &&
+  !firebaseConfig.apiKey.includes('YOUR_API_KEY') &&
+  !firebaseConfig.apiKey.includes('placeholder')
+);
+
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
@@ -90,14 +97,4 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   throw new Error(JSON.stringify(errInfo));
 }
 
-// Connection Test
-async function testConnection() {
-  try {
-    await getDocFromServer(doc(db, 'test', 'connection'));
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.error("Please check your Firebase configuration.");
-    }
-  }
-}
-testConnection();
+
