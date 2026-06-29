@@ -98,8 +98,27 @@ export default function Activities({
 
   const upcomingActivities = useMemo(() => {
     return activities
-      .filter(a => isAfter(parseISO(a.date), startOfToday()) || isSameDay(parseISO(a.date), startOfToday()))
-      .sort((a, b) => parseISO(a.date).getTime() - parseISO(b.date).getTime());
+      .filter(a => {
+        if (!a || !a.date) return false;
+        try {
+          const d = parseISO(a.date);
+          if (isNaN(d.getTime())) return false;
+          const today = startOfToday();
+          return isAfter(d, today) || isSameDay(d, today);
+        } catch {
+          return false;
+        }
+      })
+      .sort((a, b) => {
+        try {
+          const timeA = parseISO(a.date).getTime();
+          const timeB = parseISO(b.date).getTime();
+          if (isNaN(timeA) || isNaN(timeB)) return 0;
+          return timeA - timeB;
+        } catch {
+          return 0;
+        }
+      });
   }, [activities]);
 
   const handleAddActivity = (date: Date) => {
