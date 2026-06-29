@@ -17,7 +17,6 @@ import {
   differenceInDays
 } from 'date-fns';
 import { 
-  Droplets, 
   User, 
   Users, 
   Calendar, 
@@ -37,7 +36,6 @@ import { motion, AnimatePresence } from 'motion/react';
 import { onAuthStateChanged, signInWithPopup, signOut, User as FirebaseUser } from 'firebase/auth';
 import { doc, onSnapshot, setDoc } from 'firebase/firestore';
 import { auth, db, googleProvider, handleFirestoreError, OperationType } from './firebase';
-import PeriodTracker from './components/PeriodTracker';
 import TaskTracker from './components/TaskTracker';
 import Activities from './components/Activities';
 import LoveDrops from './components/LoveDrops';
@@ -110,24 +108,22 @@ const INITIAL_PERIOD_DATA: PeriodData = {
   cycleLength: 28,
 };
 
-type Page = 'dashboard' | 'period' | 'grace' | 'tanga' | 'activities' | 'love-drops';
+type Page = 'dashboard' | 'grace' | 'raili' | 'activities' | 'love-drops';
 
 function Dashboard({ 
   graceData, 
-  tangaData, 
-  periodData,
+  railiData, 
   activities,
   isDarkMode,
   onUpdateGrace,
-  onUpdateTanga
+  onUpdateRaili
 }: { 
   graceData: UserData, 
-  tangaData: UserData, 
-  periodData: PeriodData,
+  railiData: UserData, 
   activities: Activity[],
   isDarkMode: boolean,
   onUpdateGrace: (data: UserData) => void,
-  onUpdateTanga: (data: UserData) => void
+  onUpdateRaili: (data: UserData) => void
 }) {
   const today = startOfToday();
   const dayName = format(today, 'EEE') as DayOfWeek;
@@ -153,43 +149,14 @@ function Dashboard({
   };
 
   const graceProgress = calculatePercentage(graceData);
-  const tangaProgress = calculatePercentage(tangaData);
-
-  const getPhaseInfo = () => {
-    if (!periodData.startDate) return { name: 'Unknown', advice: 'Mark your period start to see cycle insights.' };
-    
-    const start = parseISO(periodData.startDate);
-    const end = periodData.endDate ? parseISO(periodData.endDate) : null;
-    const periodDuration = end ? differenceInDays(end, start) + 1 : 5;
-    const diff = differenceInDays(today, start);
-    const cycleDay = ((diff % 28) + 28) % 28;
-
-    if (cycleDay < periodDuration) return { 
-      name: 'Menstrual', 
-      advice: 'Rest & reflect. Low oestrogen reduces your stress tolerance. Reduce intense decisions, journal, and prioritize sleep to avoid overwhelm.' 
-    };
-    if (cycleDay < 12) return { 
-      name: 'Follicular', 
-      advice: 'Initiate new projects or social plans. Rising oestrogen boosts optimism and resilience. Use this mood uplift to connect with others or start something fresh.' 
-    };
-    if (cycleDay < 16) return { 
-      name: 'Ovulation', 
-      advice: 'Set boundaries with ease. Peak oestrogen & oxytocin increase empathy but also people-pleasing. Practice saying "no" calmly because your confidence is naturally higher.' 
-    };
-    return { 
-      name: 'Luteal', 
-      advice: 'Lower expectations & use calming routines. Progesterone heightens emotional sensitivity and irritability. Cancel non-essential obligations, try magnesium or chamomile, and remind yourself it\'s biological, not a personal failure.' 
-    };
-  };
-
-  const phaseInfo = getPhaseInfo();
+  const railiProgress = calculatePercentage(railiData);
 
   return (
     <div className={`h-full w-full p-4 md:p-6 overflow-y-auto transition-colors duration-300 ${isDarkMode ? 'bg-gray-900' : 'bg-gray-50'}`}>
       <div className="max-w-6xl mx-auto space-y-4 md:space-y-6 pb-24 md:pb-0">
         <header className="flex flex-col md:flex-row md:items-center justify-between gap-2 md:gap-4">
           <div>
-            <h2 className={`text-2xl md:text-4xl font-black uppercase tracking-tighter leading-none ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>LifeTrack Hub</h2>
+            <h2 className={`text-2xl md:text-4xl font-black uppercase tracking-tighter leading-none ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Habit Tracker Hub</h2>
             <p className={`text-[10px] md:text-base font-medium italic mt-0.5 md:mt-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>"Habit and Task accountability tracker. Let's strive for Godly excellence!"</p>
           </div>
           <div className="flex md:block items-center justify-between bg-purple-500/10 md:bg-transparent p-2 md:p-0 rounded-xl">
@@ -198,62 +165,25 @@ function Dashboard({
           </div>
         </header>
 
-        {/* Top Row: Cycle Awareness */}
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="bg-gradient-to-br from-purple-600 to-indigo-700 p-4 md:p-6 rounded-3xl md:rounded-[2.5rem] text-white shadow-xl shadow-purple-200/20 relative overflow-hidden"
-        >
-          <div className="absolute top-0 right-0 p-8 opacity-10 hidden md:block">
-            <Droplets size={120} />
-          </div>
-          
-          <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-3 md:gap-6">
-            <div className="flex items-center gap-3 md:gap-4">
-              <div className="p-2 md:p-4 bg-white/20 rounded-xl md:rounded-2xl backdrop-blur-md">
-                <Droplets size={20} className="md:w-8 md:h-8" />
-              </div>
-              <div>
-                <p className="text-purple-200 text-[8px] md:text-[10px] font-bold uppercase tracking-widest">Current Phase</p>
-                <h3 className="text-xl md:text-3xl font-black uppercase tracking-tight">{phaseInfo.name}</h3>
-              </div>
-            </div>
-            
-            <div className="flex-1 max-w-md bg-white/10 p-3 md:p-4 rounded-xl md:rounded-2xl backdrop-blur-sm border border-white/10">
-              <p className="text-[8px] md:text-[10px] font-bold text-purple-200 uppercase tracking-widest mb-0.5 md:mb-1">Daily Insight</p>
-              <p className="text-[11px] md:text-sm font-medium leading-tight md:leading-relaxed">"{phaseInfo.advice}"</p>
-            </div>
-
-            <div className="flex gap-4 self-end md:self-auto">
-              <div className="text-center">
-                <p className="text-[8px] md:text-[10px] font-bold text-purple-200 uppercase">Cycle Day</p>
-                <p className="text-lg md:text-2xl font-black">
-                  {periodData.startDate ? (((differenceInDays(today, parseISO(periodData.startDate)) % 28) + 28) % 28) + 1 : '--'}
-                </p>
-              </div>
-            </div>
-          </div>
-        </motion.div>
-
         {/* Main Accountability Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
           {/* Grace's Column */}
           <div className="space-y-4 md:space-y-6">
             <motion.div 
               whileHover={{ y: -5 }}
-              className={`p-4 md:p-6 rounded-3xl md:rounded-[2rem] shadow-lg border transition-colors duration-300 ${isDarkMode ? 'bg-gray-800 border-gray-700 shadow-none' : 'bg-white border-pink-50 shadow-pink-100/50'}`}
+              className={`p-4 md:p-6 rounded-3xl md:rounded-[2rem] shadow-lg border transition-colors duration-300 ${isDarkMode ? 'bg-gray-800 border-gray-700 shadow-none' : 'bg-white border-pink-100/50 shadow-pink-100/20'}`}
             >
               <div className="flex items-center justify-between mb-3 md:mb-6">
                 <div className="flex items-center gap-2 md:gap-3">
-                  <div className={`w-10 h-10 md:w-12 md:h-12 rounded-xl md:rounded-2xl flex items-center justify-center ${isDarkMode ? 'bg-pink-900/30' : 'bg-pink-100'}`}>
-                    <User className="text-pink-500 md:w-6 md:h-6" size={18} />
+                  <div className={`w-10 h-10 md:w-12 md:h-12 rounded-xl md:rounded-2xl flex items-center justify-center ${isDarkMode ? 'bg-pink-900/10' : 'bg-pink-50'}`}>
+                    <User className="text-pink-300 md:w-6 md:h-6" size={18} />
                   </div>
                   <div>
                     <h3 className={`text-base md:text-xl font-bold ${isDarkMode ? 'text-gray-100' : 'text-gray-800'}`}>Grace</h3>
                   </div>
                 </div>
                 <div className="text-right">
-                  <p className="text-lg md:text-2xl font-black text-pink-500 leading-none">{graceProgress}%</p>
+                  <p className="text-lg md:text-2xl font-black text-pink-300 leading-none">{graceProgress}%</p>
                   <p className="text-[8px] md:text-[10px] font-bold text-gray-400 uppercase">Weekly</p>
                 </div>
               </div>
@@ -281,7 +211,7 @@ function Dashboard({
                 <motion.div 
                   initial={{ width: 0 }}
                   animate={{ width: `${graceProgress}%` }}
-                  className="h-full bg-pink-500"
+                  className="h-full bg-pink-300"
                 />
               </div>
 
@@ -293,7 +223,7 @@ function Dashboard({
                   ) : (
                     graceData.weeklySchedule[dayName].tasks.map(t => (
                       <div key={t.id} className={`flex items-center gap-2 p-2 rounded-xl border transition-colors duration-300 ${isDarkMode ? 'bg-gray-900/50 border-gray-700' : 'bg-gray-50 border-gray-100'}`}>
-                        <div className={`w-1.5 h-1.5 md:w-2 md:h-2 rounded-full shrink-0 ${t.completed ? 'bg-pink-500' : 'bg-gray-300'}`} />
+                        <div className={`w-1.5 h-1.5 md:w-2 md:h-2 rounded-full shrink-0 ${t.completed ? 'bg-pink-300' : 'bg-gray-300'}`} />
                         <span className={`text-[10px] md:text-xs font-medium break-words whitespace-normal leading-tight ${t.completed ? 'line-through text-gray-500' : (isDarkMode ? 'text-gray-300' : 'text-gray-700')}`}>
                           {t.name}
                         </span>
@@ -305,28 +235,28 @@ function Dashboard({
             </motion.div>
           </div>
 
-          {/* Tanga's Column */}
+          {/* Raili's Column */}
           <div className="space-y-4 md:space-y-6">
             <motion.div 
               whileHover={{ y: -5 }}
-              className={`p-4 md:p-6 rounded-3xl md:rounded-[2rem] shadow-lg border transition-colors duration-300 ${isDarkMode ? 'bg-gray-800 border-gray-700 shadow-none' : 'bg-white border-blue-50 shadow-blue-100/50'}`}
+              className={`p-4 md:p-6 rounded-3xl md:rounded-[2rem] shadow-lg border transition-colors duration-300 ${isDarkMode ? 'bg-gray-800 border-gray-700 shadow-none' : 'bg-white border-violet-100 shadow-violet-100/30'}`}
             >
               <div className="flex items-center justify-between mb-3 md:mb-6">
                 <div className="flex items-center gap-2 md:gap-3">
-                  <div className={`w-10 h-10 md:w-12 md:h-12 rounded-xl md:rounded-2xl flex items-center justify-center ${isDarkMode ? 'bg-blue-900/30' : 'bg-blue-100'}`}>
-                    <Users className="text-blue-500 md:w-6 md:h-6" size={18} />
+                  <div className={`w-10 h-10 md:w-12 md:h-12 rounded-xl md:rounded-2xl flex items-center justify-center ${isDarkMode ? 'bg-violet-900/20' : 'bg-violet-100/60'}`}>
+                    <Users className="text-violet-400 md:w-6 md:h-6" size={18} />
                   </div>
                   <div>
-                    <h3 className={`text-base md:text-xl font-bold ${isDarkMode ? 'text-gray-100' : 'text-gray-800'}`}>Tanga</h3>
+                    <h3 className={`text-base md:text-xl font-bold ${isDarkMode ? 'text-gray-100' : 'text-gray-800'}`}>Raili</h3>
                   </div>
                 </div>
                 <div className="text-right">
-                  <p className="text-lg md:text-2xl font-black text-blue-500 leading-none">{tangaProgress}%</p>
+                  <p className="text-lg md:text-2xl font-black text-violet-400 leading-none">{railiProgress}%</p>
                   <p className="text-[8px] md:text-[10px] font-bold text-gray-400 uppercase">Weekly</p>
                 </div>
               </div>
 
-              {tangaData.hasNewMessage && (
+              {railiData.hasNewMessage && (
                 <motion.div 
                   initial={{ opacity: 0, scale: 0.9 }}
                   animate={{ opacity: 1, scale: 1 }}
@@ -337,7 +267,7 @@ function Dashboard({
                     <span className="text-[9px] font-black uppercase tracking-widest">New ChatDesk Message!</span>
                   </div>
                   <button 
-                    onClick={() => onUpdateTanga({ ...tangaData, hasNewMessage: false })}
+                    onClick={() => onUpdateRaili({ ...railiData, hasNewMessage: false })}
                     className="p-1 bg-white text-red-600 hover:bg-red-50 rounded-lg transition-all shadow-sm active:scale-95 flex items-center justify-center"
                   >
                     <Check size={11} strokeWidth={4} />
@@ -348,20 +278,20 @@ function Dashboard({
               <div className={`w-full h-1.5 md:h-2 rounded-full overflow-hidden mb-4 md:mb-6 ${isDarkMode ? 'bg-gray-700' : 'bg-gray-100'}`}>
                 <motion.div 
                   initial={{ width: 0 }}
-                  animate={{ width: `${tangaProgress}%` }}
-                  className="h-full bg-blue-500"
+                  animate={{ width: `${railiProgress}%` }}
+                  className="h-full bg-violet-400"
                 />
               </div>
 
               <div className="space-y-3 md:space-y-4">
                 <h4 className={`text-[9px] md:text-[10px] font-black uppercase tracking-widest border-b pb-1 md:pb-2 ${isDarkMode ? 'text-gray-500 border-gray-700' : 'text-gray-400 border-gray-100'}`}>Today's Focus</h4>
                 <div className="space-y-2 max-h-40 md:max-h-48 overflow-y-auto pr-1 md:pr-2">
-                  {tangaData.weeklySchedule[dayName].tasks.length === 0 ? (
+                  {railiData.weeklySchedule[dayName].tasks.length === 0 ? (
                     <p className="text-[10px] md:text-xs text-gray-400 italic">No tasks set for today.</p>
                   ) : (
-                    tangaData.weeklySchedule[dayName].tasks.map(t => (
+                    railiData.weeklySchedule[dayName].tasks.map(t => (
                       <div key={t.id} className={`flex items-center gap-2 p-2 rounded-xl border transition-colors duration-300 ${isDarkMode ? 'bg-gray-900/50 border-gray-700' : 'bg-gray-50 border-gray-100'}`}>
-                        <div className={`w-1.5 h-1.5 md:w-2 md:h-2 rounded-full shrink-0 ${t.completed ? 'bg-blue-500' : 'bg-gray-300'}`} />
+                        <div className={`w-1.5 h-1.5 md:w-2 md:h-2 rounded-full shrink-0 ${t.completed ? 'bg-violet-400' : 'bg-gray-300'}`} />
                         <span className={`text-[10px] md:text-xs font-medium break-words whitespace-normal leading-tight ${t.completed ? 'line-through text-gray-500' : (isDarkMode ? 'text-gray-300' : 'text-gray-700')}`}>
                           {t.name}
                         </span>
@@ -397,9 +327,9 @@ function Dashboard({
                     <p className="text-[10px] md:text-xs text-gray-400 italic">No upcoming activities.</p>
                   ) : (
                     upcomingActivities.map(a => (
-                      <div key={a.id} className={`p-3 rounded-xl border-l-4 transition-colors duration-300 ${isDarkMode ? 'bg-gray-900/50 border-gray-700' : 'bg-gray-50 border-gray-100'} ${a.owner === 'grace' ? 'border-l-pink-500' : 'border-l-blue-500'}`}>
+                      <div key={a.id} className={`p-3 rounded-xl border-l-4 transition-colors duration-300 ${isDarkMode ? 'bg-gray-900/50 border-gray-700' : 'bg-gray-50 border-gray-100'} ${a.owner === 'grace' ? 'border-l-pink-300' : 'border-l-violet-400'}`}>
                         <div className="flex justify-between items-center mb-1">
-                          <span className={`text-[8px] font-black uppercase tracking-widest ${a.owner === 'grace' ? 'text-pink-500' : 'text-blue-500'}`}>{a.owner}</span>
+                          <span className={`text-[8px] font-black uppercase tracking-widest ${a.owner === 'grace' ? 'text-pink-300' : 'text-violet-400'}`}>{a.owner}</span>
                           <span className="text-[8px] font-bold text-gray-400">{format(parseISO(a.date), 'MMM d')}</span>
                         </div>
                         <p className={`text-[11px] font-bold break-words whitespace-normal leading-tight ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>{a.name}</p>
@@ -425,7 +355,7 @@ function AppContent() {
   });
   
   const [graceData, setGraceData] = useState<UserData>(INITIAL_USER_DATA);
-  const [tangaData, setTangaData] = useState<UserData>(INITIAL_USER_DATA);
+  const [railiData, setRailiData] = useState<UserData>(INITIAL_USER_DATA);
   const [periodData, setPeriodData] = useState<PeriodData>(INITIAL_PERIOD_DATA);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -450,13 +380,13 @@ function AppContent() {
       }
     }, (e) => handleFirestoreError(e, OperationType.GET, 'trackers/grace'));
 
-    const unsubTanga = onSnapshot(doc(db, 'trackers', 'tanga'), (snapshot) => {
+    const unsubRaili = onSnapshot(doc(db, 'trackers', 'raili'), (snapshot) => {
       if (snapshot.exists()) {
-        setTangaData(snapshot.data() as UserData);
+        setRailiData(snapshot.data() as UserData);
       } else {
-        setDoc(doc(db, 'trackers', 'tanga'), INITIAL_USER_DATA).catch(e => handleFirestoreError(e, OperationType.WRITE, 'trackers/tanga'));
+        setDoc(doc(db, 'trackers', 'raili'), INITIAL_USER_DATA).catch(e => handleFirestoreError(e, OperationType.WRITE, 'trackers/raili'));
       }
-    }, (e) => handleFirestoreError(e, OperationType.GET, 'trackers/tanga'));
+    }, (e) => handleFirestoreError(e, OperationType.GET, 'trackers/raili'));
 
     const unsubPeriod = onSnapshot(doc(db, 'trackers', 'period'), (snapshot) => {
       if (snapshot.exists()) {
@@ -486,7 +416,7 @@ function AppContent() {
 
     return () => {
       unsubGrace();
-      unsubTanga();
+      unsubRaili();
       unsubPeriod();
       unsubActivities();
       unsubMessages();
@@ -541,35 +471,35 @@ function AppContent() {
     return () => clearInterval(interval);
   }, [graceData.lastResetDate, graceData.habits, graceData.weeklySchedule]);
 
-  // Reset Monitor for Tanga
+  // Reset Monitor for Raili
   useEffect(() => {
-    if (!tangaData.lastResetDate) return;
+    if (!railiData.lastResetDate) return;
 
     const checkReset = () => {
       const today = startOfToday();
-      const lastReset = parseISO(tangaData.lastResetDate);
+      const lastReset = parseISO(railiData.lastResetDate);
       const isSaturday = format(today, 'EEE') === 'Sat';
       const alreadyResetToday = isSameDay(today, lastReset);
       const daysSinceLastReset = differenceInDays(today, lastReset);
 
       if ((isSaturday && !alreadyResetToday) || daysSinceLastReset >= 7) {
-        handleUpdateTanga(getResetData(tangaData));
+        handleUpdateRaili(getResetData(railiData));
       }
     };
 
     checkReset();
     const interval = setInterval(checkReset, 1000 * 60 * 60);
     return () => clearInterval(interval);
-  }, [tangaData.lastResetDate, tangaData.habits, tangaData.weeklySchedule]);
+  }, [railiData.lastResetDate, railiData.habits, railiData.weeklySchedule]);
 
   const handleUpdateGrace = (newData: UserData) => {
     setGraceData(newData);
     setDoc(doc(db, 'trackers', 'grace'), newData).catch(e => handleFirestoreError(e, OperationType.WRITE, 'trackers/grace'));
   };
 
-  const handleUpdateTanga = (newData: UserData) => {
-    setTangaData(newData);
-    setDoc(doc(db, 'trackers', 'tanga'), newData).catch(e => handleFirestoreError(e, OperationType.WRITE, 'trackers/tanga'));
+  const handleUpdateRaili = (newData: UserData) => {
+    setRailiData(newData);
+    setDoc(doc(db, 'trackers', 'raili'), newData).catch(e => handleFirestoreError(e, OperationType.WRITE, 'trackers/raili'));
   };
 
   const handleUpdatePeriod = (start: string | null, end: string | null) => {
@@ -583,7 +513,7 @@ function AppContent() {
     setDoc(doc(db, 'trackers', 'activities'), { list: newActivities }).catch(e => handleFirestoreError(e, OperationType.WRITE, 'trackers/activities'));
   };
 
-  const handleSendMessage = (text: string, sender: 'grace' | 'tanga') => {
+  const handleSendMessage = (text: string, sender: 'grace' | 'raili') => {
     const newMessage: ChatMessage = {
       id: crypto.randomUUID(),
       text,
@@ -596,9 +526,9 @@ function AppContent() {
 
     // Notify the other user
     if (sender === 'grace') {
-      const newTangaData = { ...tangaData, hasNewMessage: true };
-      setTangaData(newTangaData);
-      setDoc(doc(db, 'trackers', 'tanga'), newTangaData).catch(e => handleFirestoreError(e, OperationType.WRITE, 'trackers/tanga'));
+      const newRailiData = { ...railiData, hasNewMessage: true };
+      setRailiData(newRailiData);
+      setDoc(doc(db, 'trackers', 'raili'), newRailiData).catch(e => handleFirestoreError(e, OperationType.WRITE, 'trackers/raili'));
     } else {
       const newGraceData = { ...graceData, hasNewMessage: true };
       setGraceData(newGraceData);
@@ -625,7 +555,7 @@ function AppContent() {
           <div className={`p-2 rounded-lg ${isDarkMode ? 'bg-purple-900/50' : 'bg-purple-100'}`}>
             <Heart className="text-purple-500" size={20} />
           </div>
-          <span className={`font-bold text-lg tracking-tight ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>LifeTrack</span>
+          <span className={`font-bold text-lg tracking-tight ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>Habit Tracker</span>
         </div>
 
         <div className={`flex items-center gap-2 p-1 rounded-xl transition-colors duration-300 ${isDarkMode ? 'bg-gray-900' : 'bg-gray-100'}`}>
@@ -640,34 +570,24 @@ function AppContent() {
             Dashboard
           </button>
           <button
-            onClick={() => setActivePage('period')}
-            className={`
-              flex items-center gap-2 px-4 py-2 rounded-lg transition-all text-sm font-bold
-              ${activePage === 'period' ? (isDarkMode ? 'bg-gray-800 shadow-sm text-purple-400' : 'bg-white shadow-sm text-purple-600') : 'text-gray-500 hover:text-gray-700'}
-            `}
-          >
-            <Droplets size={18} />
-            Period
-          </button>
-          <button
             onClick={() => setActivePage('grace')}
             className={`
               flex items-center gap-2 px-4 py-2 rounded-lg transition-all text-sm font-bold
-              ${activePage === 'grace' ? (isDarkMode ? 'bg-gray-800 shadow-sm text-pink-400' : 'bg-white shadow-sm text-pink-600') : 'text-gray-500 hover:text-gray-700'}
+              ${activePage === 'grace' ? (isDarkMode ? 'bg-gray-800 shadow-sm text-pink-300' : 'bg-white shadow-sm text-pink-400') : 'text-gray-500 hover:text-gray-700'}
             `}
           >
             <User size={18} />
             Grace
           </button>
           <button
-            onClick={() => setActivePage('tanga')}
+            onClick={() => setActivePage('raili')}
             className={`
               flex items-center gap-2 px-4 py-2 rounded-lg transition-all text-sm font-bold
-              ${activePage === 'tanga' ? (isDarkMode ? 'bg-gray-800 shadow-sm text-blue-400' : 'bg-white shadow-sm text-blue-600') : 'text-gray-500 hover:text-gray-700'}
+              ${activePage === 'raili' ? (isDarkMode ? 'bg-gray-800 shadow-sm text-violet-400' : 'bg-white shadow-sm text-violet-500') : 'text-gray-500 hover:text-gray-700'}
             `}
           >
             <Users size={18} />
-            Tanga
+            Raili
           </button>
           <button
             onClick={() => setActivePage('activities')}
@@ -705,59 +625,6 @@ function AppContent() {
         </div>
       </nav>
 
-      {/* Bottom Navigation - Mobile */}
-      <nav className={`md:hidden fixed bottom-0 left-0 right-0 z-50 px-4 py-3 flex items-center justify-around shadow-[0_-4px_10px_rgba(0,0,0,0.05)] transition-colors duration-300 ${isDarkMode ? 'bg-gray-800 border-t border-gray-700' : 'bg-white border-t border-gray-200'}`}>
-        <button
-          onClick={() => setActivePage('dashboard')}
-          className={`flex flex-col items-center gap-1 transition-all ${activePage === 'dashboard' ? 'text-purple-500' : 'text-gray-400'}`}
-        >
-          <LayoutDashboard size={24} />
-          <span className="text-[10px] font-bold uppercase tracking-tighter">Home</span>
-        </button>
-        <button
-          onClick={() => setActivePage('period')}
-          className={`flex flex-col items-center gap-1 transition-all ${activePage === 'period' ? 'text-purple-500' : 'text-gray-400'}`}
-        >
-          <Droplets size={24} />
-          <span className="text-[10px] font-bold uppercase tracking-tighter">Period</span>
-        </button>
-        <button
-          onClick={() => setActivePage('grace')}
-          className={`flex flex-col items-center gap-1 transition-all ${activePage === 'grace' ? 'text-pink-500' : 'text-gray-400'}`}
-        >
-          <User size={24} />
-          <span className="text-[10px] font-bold uppercase tracking-tighter">Grace</span>
-        </button>
-        <button
-          onClick={() => setActivePage('tanga')}
-          className={`flex flex-col items-center gap-1 transition-all ${activePage === 'tanga' ? 'text-blue-500' : 'text-gray-400'}`}
-        >
-          <Users size={24} />
-          <span className="text-[10px] font-bold uppercase tracking-tighter">Tanga</span>
-        </button>
-        <button
-          onClick={() => setActivePage('activities')}
-          className={`flex flex-col items-center gap-1 transition-all ${activePage === 'activities' ? 'text-purple-500' : 'text-gray-400'}`}
-        >
-          <Calendar size={24} />
-          <span className="text-[10px] font-bold uppercase tracking-tighter">Events</span>
-        </button>
-        <button
-          onClick={() => setActivePage('love-drops')}
-          className={`flex flex-col items-center gap-1 transition-all ${activePage === 'love-drops' ? 'text-pink-500' : 'text-gray-400'}`}
-        >
-          <MessageSquare size={24} className={activePage === 'love-drops' ? 'fill-pink-500' : ''} />
-          <span className="text-[10px] font-bold uppercase tracking-tighter">ChatDesk</span>
-        </button>
-        <button
-          onClick={() => setIsDarkMode(!isDarkMode)}
-          className={`flex flex-col items-center gap-1 transition-all ${isDarkMode ? 'text-yellow-400' : 'text-gray-400'}`}
-        >
-          {isDarkMode ? <Sun size={24} /> : <Moon size={24} />}
-          <span className="text-[10px] font-bold uppercase tracking-tighter">Theme</span>
-        </button>
-      </nav>
-
       {/* Page Content */}
       <main className="flex-1 relative overflow-hidden">
         <AnimatePresence mode="wait">
@@ -771,12 +638,11 @@ function AppContent() {
             >
               <Dashboard 
                 graceData={graceData}
-                tangaData={tangaData}
-                periodData={periodData}
+                railiData={railiData}
                 activities={activities}
                 isDarkMode={isDarkMode}
                 onUpdateGrace={handleUpdateGrace}
-                onUpdateTanga={handleUpdateTanga}
+                onUpdateRaili={handleUpdateRaili}
               />
             </motion.div>
           )}
@@ -791,27 +657,10 @@ function AppContent() {
             >
               <Activities 
                 activities={activities}
-                onUpdate={handleUpdateActivities}
+                onUpdate={onUpdate => handleUpdateActivities(onUpdate)}
                 isDarkMode={isDarkMode}
                 highlightDate={highlightDate}
                 onClearHighlight={() => setHighlightDate(null)}
-              />
-            </motion.div>
-          )}
-
-          {activePage === 'period' && (
-            <motion.div
-              key="period"
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 20 }}
-              className="absolute inset-0"
-            >
-              <PeriodTracker 
-                startDate={periodData.startDate}
-                endDate={periodData.endDate}
-                onUpdate={handleUpdatePeriod}
-                isDarkMode={isDarkMode}
               />
             </motion.div>
           )}
@@ -836,19 +685,19 @@ function AppContent() {
             </motion.div>
           )}
 
-          {activePage === 'tanga' && (
+          {activePage === 'raili' && (
             <motion.div
-              key="tanga"
+              key="raili"
               initial={{ opacity: 0, scale: 0.98 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 1.02 }}
               className="absolute inset-0"
             >
               <TaskTracker 
-                name="Tanga"
+                name="Raili"
                 colorScheme="blue"
-                data={tangaData}
-                onUpdate={handleUpdateTanga}
+                data={railiData}
+                onUpdate={handleUpdateRaili}
                 isDarkMode={isDarkMode}
                 activities={activities}
                 onActivityClick={handleActivityClick}
@@ -873,6 +722,52 @@ function AppContent() {
           )}
         </AnimatePresence>
       </main>
+
+      {/* Bottom Navigation - Mobile */}
+      <nav className={`md:hidden z-50 px-4 py-3 flex items-center justify-around shadow-[0_-4px_10px_rgba(0,0,0,0.05)] shrink-0 transition-colors duration-300 ${isDarkMode ? 'bg-gray-800 border-t border-gray-700' : 'bg-white border-t border-gray-200'}`}>
+        <button
+          onClick={() => setActivePage('dashboard')}
+          className={`flex flex-col items-center gap-1 transition-all ${activePage === 'dashboard' ? 'text-purple-500' : 'text-gray-400'}`}
+        >
+          <LayoutDashboard size={24} />
+          <span className="text-[10px] font-bold uppercase tracking-tighter">Home</span>
+        </button>
+        <button
+          onClick={() => setActivePage('grace')}
+          className={`flex flex-col items-center gap-1 transition-all ${activePage === 'grace' ? 'text-pink-300' : 'text-gray-400'}`}
+        >
+          <User size={24} />
+          <span className="text-[10px] font-bold uppercase tracking-tighter">Grace</span>
+        </button>
+        <button
+          onClick={() => setActivePage('raili')}
+          className={`flex flex-col items-center gap-1 transition-all ${activePage === 'raili' ? 'text-violet-400' : 'text-gray-400'}`}
+        >
+          <Users size={24} />
+          <span className="text-[10px] font-bold uppercase tracking-tighter">Raili</span>
+        </button>
+        <button
+          onClick={() => setActivePage('activities')}
+          className={`flex flex-col items-center gap-1 transition-all ${activePage === 'activities' ? 'text-purple-500' : 'text-gray-400'}`}
+        >
+          <Calendar size={24} />
+          <span className="text-[10px] font-bold uppercase tracking-tighter">Events</span>
+        </button>
+        <button
+          onClick={() => setActivePage('love-drops')}
+          className={`flex flex-col items-center gap-1 transition-all ${activePage === 'love-drops' ? 'text-pink-400' : 'text-gray-400'}`}
+        >
+          <MessageSquare size={24} className={activePage === 'love-drops' ? 'fill-pink-400' : ''} />
+          <span className="text-[10px] font-bold uppercase tracking-tighter">ChatDesk</span>
+        </button>
+        <button
+          onClick={() => setIsDarkMode(!isDarkMode)}
+          className={`flex flex-col items-center gap-1 transition-all ${isDarkMode ? 'text-yellow-400' : 'text-gray-400'}`}
+        >
+          {isDarkMode ? <Sun size={24} /> : <Moon size={24} />}
+          <span className="text-[10px] font-bold uppercase tracking-tighter">Theme</span>
+        </button>
+      </nav>
     </div>
   );
 }

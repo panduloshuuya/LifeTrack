@@ -6,7 +6,7 @@ import { format, parseISO } from 'date-fns';
 
 interface LoveDropsProps {
   messages: ChatMessage[];
-  onSendMessage: (text: string, sender: 'grace' | 'tanga') => void;
+  onSendMessage: (text: string, sender: 'grace' | 'raili') => void;
   onDeleteMessage: (id: string) => void;
   isDarkMode: boolean;
 }
@@ -29,7 +29,7 @@ export default function LoveDrops({ messages, onSendMessage, onDeleteMessage, is
     setShowSenderPrompt(true);
   };
 
-  const selectSenderAndSend = (sender: 'grace' | 'tanga') => {
+  const selectSenderAndSend = (sender: 'grace' | 'raili') => {
     onSendMessage(inputText.trim(), sender);
     setInputText('');
     setShowSenderPrompt(false);
@@ -41,9 +41,9 @@ export default function LoveDrops({ messages, onSendMessage, onDeleteMessage, is
       <header className={`p-4 md:p-6 border-b flex items-center justify-between transition-colors duration-300 ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
         <div>
           <h2 className="text-xl md:text-2xl font-black uppercase tracking-tighter flex items-center gap-2">
-            <MessageSquare size={24} className="text-pink-500 fill-pink-500" />
+            <MessageSquare size={24} className="text-pink-300 fill-pink-300" />
             ChatDesk
-            <span className="text-pink-500 text-xs lowercase animate-pulse">● live</span>
+            <span className="text-pink-300 text-xs lowercase animate-pulse">● live</span>
           </h2>
           <p className={`text-[10px] font-bold uppercase tracking-widest ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>Accountability pit stop. Check in here</p>
         </div>
@@ -69,8 +69,8 @@ export default function LoveDrops({ messages, onSendMessage, onDeleteMessage, is
                   className={`
                     p-3 md:p-4 rounded-2xl shadow-sm text-sm md:text-base font-medium break-words
                     ${msg.sender === 'grace' 
-                      ? 'bg-pink-500 text-white rounded-tr-none' 
-                      : 'bg-blue-500 text-white rounded-tl-none'}
+                      ? 'bg-pink-300 text-white rounded-tr-none' 
+                      : 'bg-violet-400 text-white rounded-tl-none'}
                   `}
                 >
                   {msg.text}
@@ -104,14 +104,14 @@ export default function LoveDrops({ messages, onSendMessage, onDeleteMessage, is
             placeholder="Type a message..."
             className={`flex-1 p-3 md:p-4 rounded-2xl border-2 outline-none transition-all ${
               isDarkMode 
-                ? 'bg-gray-900 border-gray-700 text-white focus:border-pink-500' 
-                : 'bg-gray-50 border-gray-100 text-gray-800 focus:border-pink-500'
+                ? 'bg-gray-900 border-gray-700 text-white focus:border-pink-300' 
+                : 'bg-gray-50 border-gray-100 text-gray-800 focus:border-pink-300'
             }`}
           />
           <button 
             onClick={handleSendClick}
             disabled={!inputText.trim()}
-            className="p-3 md:p-4 bg-pink-500 text-white rounded-2xl shadow-lg shadow-pink-500/20 hover:scale-105 active:scale-95 transition-all disabled:opacity-50 disabled:hover:scale-100"
+            className="p-3 md:p-4 bg-pink-300 text-white rounded-2xl shadow-lg shadow-pink-300/20 hover:scale-105 active:scale-95 transition-all disabled:opacity-50 disabled:hover:scale-100"
           >
             <Send size={20} />
           </button>
@@ -141,17 +141,17 @@ export default function LoveDrops({ messages, onSendMessage, onDeleteMessage, is
               <div className="grid grid-cols-2 gap-4">
                 <button 
                   onClick={() => selectSenderAndSend('grace')}
-                  className="group relative h-32 flex flex-col items-center justify-center bg-pink-500 text-white rounded-3xl shadow-lg shadow-pink-500/20 hover:scale-105 transition-transform"
+                  className="group relative h-32 flex flex-col items-center justify-center bg-pink-300 text-white rounded-3xl shadow-lg shadow-pink-300/20 hover:scale-105 transition-transform"
                 >
                   <User size={32} className="mb-2" />
                   <span className="font-black uppercase tracking-widest">Grace</span>
                 </button>
                 <button 
-                  onClick={() => selectSenderAndSend('tanga')}
-                  className="group relative h-32 flex flex-col items-center justify-center bg-blue-500 text-white rounded-3xl shadow-lg shadow-blue-500/20 hover:scale-105 transition-transform"
+                  onClick={() => selectSenderAndSend('raili')}
+                  className="group relative h-32 flex flex-col items-center justify-center bg-violet-400 text-white rounded-3xl shadow-lg shadow-violet-400/20 hover:scale-105 transition-transform"
                 >
                   <User size={32} className="mb-2" />
-                  <span className="font-black uppercase tracking-widest">Tanga</span>
+                  <span className="font-black uppercase tracking-widest">Raili</span>
                 </button>
               </div>
               

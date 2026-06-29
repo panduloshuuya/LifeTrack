@@ -70,18 +70,18 @@ export default function TaskTracker({
   const today = startOfToday();
 
   const colors = {
-    primary: colorScheme === 'pink' ? 'bg-pink-500' : 'bg-blue-500',
+    primary: colorScheme === 'pink' ? 'bg-pink-300' : 'bg-violet-400',
     secondary: colorScheme === 'pink' 
-      ? (isDarkMode ? 'bg-pink-900/30' : 'bg-pink-100') 
-      : (isDarkMode ? 'bg-blue-900/30' : 'bg-blue-100'),
-    text: colorScheme === 'pink' ? 'text-pink-500' : 'text-blue-500',
+      ? (isDarkMode ? 'bg-pink-950/20' : 'bg-pink-50') 
+      : (isDarkMode ? 'bg-violet-900/20' : 'bg-violet-50'),
+    text: colorScheme === 'pink' ? 'text-pink-400' : 'text-violet-500',
     border: colorScheme === 'pink' 
-      ? (isDarkMode ? 'border-pink-900/50' : 'border-pink-200') 
-      : (isDarkMode ? 'border-blue-900/50' : 'border-blue-200'),
+      ? (isDarkMode ? 'border-pink-900/30' : 'border-pink-100') 
+      : (isDarkMode ? 'border-violet-900/40' : 'border-violet-200/50'),
     hover: colorScheme === 'pink' 
-      ? (isDarkMode ? 'hover:bg-pink-900/50' : 'hover:bg-pink-200') 
-      : (isDarkMode ? 'hover:bg-blue-900/50' : 'hover:bg-blue-200'),
-    accent: colorScheme === 'pink' ? 'bg-[#D24D74]' : 'bg-[#4D74D2]',
+      ? (isDarkMode ? 'hover:bg-pink-900/20' : 'hover:bg-pink-100/40') 
+      : (isDarkMode ? 'hover:bg-violet-900/30' : 'hover:bg-violet-100/60'),
+    accent: colorScheme === 'pink' ? 'bg-pink-300' : 'bg-violet-400',
   };
 
   const calendarDays = useMemo(() => {
@@ -246,7 +246,7 @@ export default function TaskTracker({
   return (
     <div className={`h-full w-full flex flex-col md:flex-row md:overflow-hidden overflow-y-auto font-sans transition-colors duration-300 ${isDarkMode ? 'bg-gray-900 text-gray-100' : 'bg-white text-gray-800'}`}>
       {/* Sidebar - Desktop: Left, Mobile: Top/Collapsible (simplified for mobile) */}
-      <div className={`w-full md:w-80 border-b-2 md:border-b-0 md:border-r-2 flex flex-col h-auto md:h-full shrink-0 transition-colors duration-300 ${isDarkMode ? 'bg-gray-800/50 border-gray-700' : 'bg-gray-50/50 border-pink-200'}`}>
+      <div className={`w-full md:w-80 border-b-2 md:border-b-0 md:border-r-2 flex flex-col h-auto md:h-full shrink-0 transition-colors duration-300 ${isDarkMode ? 'bg-gray-800/50 border-gray-700' : (colorScheme === 'pink' ? 'bg-pink-50/20 border-pink-100' : 'bg-violet-50/20 border-violet-100')}`}>
         {/* Weekly Planner Header */}
         <div className={`${colors.accent} text-white p-4 text-center font-bold text-lg md:text-xl uppercase tracking-widest`}>
           {name}'s Planner
@@ -325,7 +325,7 @@ export default function TaskTracker({
                 >
                   {format(day, 'd')}
                   {hasActivity && (
-                    <div className={`w-1 h-1 rounded-full absolute bottom-1 ${colorScheme === 'pink' ? 'bg-pink-500' : 'bg-blue-500'} ${isToday(day) ? 'bg-white' : ''}`} />
+                    <div className={`w-1 h-1 rounded-full absolute bottom-1 ${colorScheme === 'pink' ? 'bg-pink-300' : 'bg-violet-400'} ${isToday(day) ? 'bg-white' : ''}`} />
                   )}
                 </div>
               );
@@ -337,12 +337,12 @@ export default function TaskTracker({
         <div className="flex-none md:flex-1 flex flex-col">
           <div className={`p-2 border-b flex justify-between items-center transition-colors duration-300 ${isDarkMode ? 'bg-gray-800/80 border-gray-700' : 'bg-gray-100 border-gray-200'}`}>
             <span className={`font-bold text-xs uppercase tracking-tighter ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Weekly Habits</span>
-            <button onClick={addHabit} className={`p-1 rounded transition-colors ${isDarkMode ? 'text-pink-400 hover:bg-gray-700' : 'text-pink-600 hover:bg-white'}`}>
+            <button onClick={addHabit} className={`p-1 rounded transition-colors ${colors.text} ${isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-white'}`}>
               <Plus size={14} />
             </button>
           </div>
-          <div className="md:flex-1 md:overflow-y-auto">
-            <table className="w-full text-[10px]">
+          <div className="overflow-x-auto md:overflow-x-visible md:flex-1 md:overflow-y-auto">
+            <table className="w-full text-[10px] min-w-[280px]">
               <thead className={`sticky top-0 shadow-sm z-10 transition-colors duration-300 ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
                 <tr className={`border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-200'}`}>
                   <th className={`p-1 text-left ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>Habit</th>
@@ -475,8 +475,8 @@ export default function TaskTracker({
                   }}
                   className={`w-full p-3 rounded-xl border-2 outline-none transition-all mb-6 ${
                     isDarkMode 
-                      ? `bg-gray-900 border-gray-700 text-white focus:border-${colorScheme === 'pink' ? 'pink' : 'blue'}-500` 
-                      : `bg-gray-50 border-gray-100 text-gray-800 focus:border-${colorScheme === 'pink' ? 'pink' : 'blue'}-500`
+                      ? `bg-gray-900 border-gray-700 text-white focus:border-${colorScheme === 'pink' ? 'pink-300' : 'violet-400'}` 
+                      : `bg-gray-50 border-gray-100 text-gray-800 focus:border-${colorScheme === 'pink' ? 'pink-300' : 'violet-400'}`
                   }`}
                   placeholder="Type something..."
                 />

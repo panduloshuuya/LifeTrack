@@ -33,7 +33,7 @@ export interface Activity {
   name: string;
   time: string;
   date: string; // ISO string
-  owner: 'grace' | 'tanga';
+  owner: 'grace' | 'raili';
 }
 
 export interface UserData {
@@ -52,13 +52,13 @@ export interface PeriodData {
 export interface ChatMessage {
   id: string;
   text: string;
-  sender: 'grace' | 'tanga';
+  sender: 'grace' | 'raili';
   timestamp: string; // ISO string
 }
 
 export interface AppData {
   grace: UserData;
-  tanga: UserData;
+  raili: UserData;
   period: PeriodData;
   activities: Activity[];
   messages: ChatMessage[];

@@ -86,7 +86,7 @@ export default function PeriodTracker({ startDate, endDate, onUpdate, isDarkMode
   };
 
   return (
-    <div className={`h-full w-full flex flex-col md:flex-row overflow-hidden font-sans transition-colors duration-300 ${isDarkMode ? 'bg-gray-900 text-gray-100' : 'bg-white text-gray-800'}`}>
+    <div className={`h-full w-full flex flex-col md:flex-row md:overflow-hidden overflow-y-auto font-sans transition-colors duration-300 ${isDarkMode ? 'bg-gray-900 text-gray-100' : 'bg-white text-gray-800'}`}>
       {/* Sidebar - Desktop: Left, Mobile: Top */}
       <div className={`w-full md:w-[300px] border-b-2 md:border-b-0 md:border-r-2 flex flex-col h-auto md:h-full transition-colors duration-300 ${isDarkMode ? 'bg-gray-800/50 border-purple-900/50' : 'bg-gray-50/50 border-purple-200'}`}>
         {/* Header */}
@@ -140,7 +140,7 @@ export default function PeriodTracker({ startDate, endDate, onUpdate, isDarkMode
             <h2 className={`text-[10px] font-bold uppercase tracking-widest mb-2 ${isDarkMode ? 'text-gray-600' : 'text-gray-400'}`}>Cycle Phases</h2>
             <div className="grid grid-cols-2 md:grid-cols-1 gap-2">
               {[
-                { label: 'Menstrual', color: isDarkMode ? 'bg-pink-900/40' : 'bg-pink-200', text: 'text-pink-400', desc: 'Active Period' },
+                { label: 'Menstrual', color: isDarkMode ? 'bg-pink-900/40' : 'bg-pink-200', text: 'text-pink-300', desc: 'Active Period' },
                 { label: 'Follicular', color: isDarkMode ? 'bg-green-900/40' : 'bg-green-100', text: 'text-green-400', desc: 'Pre-Ovulation' },
                 { label: 'Ovulation', color: isDarkMode ? 'bg-blue-900/40' : 'bg-blue-100', text: 'text-blue-400', desc: 'Fertile Window' },
                 { label: 'Luteal', color: isDarkMode ? 'bg-purple-900/40' : 'bg-purple-100', text: 'text-purple-400', desc: 'Post-Ovulation' },
@@ -206,7 +206,7 @@ export default function PeriodTracker({ startDate, endDate, onUpdate, isDarkMode
                 </span>
                 
                 {phase === 'period' && (
-                  <div className="w-1.5 h-1.5 md:w-2 md:h-2 bg-pink-500 rounded-full mt-1 shadow-sm" />
+                  <div className="w-1.5 h-1.5 md:w-2 md:h-2 bg-pink-300 rounded-full mt-1 shadow-sm" />
                 )}
 
                 {isTodayDate && (

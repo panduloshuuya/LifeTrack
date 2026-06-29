@@ -71,7 +71,7 @@ export default function Activities({
   const [modal, setModal] = useState<{
     isOpen: boolean;
     date: Date | null;
-    owner: 'grace' | 'tanga' | null;
+    owner: 'grace' | 'raili' | null;
     name: string;
     time: string;
   }>({
@@ -156,15 +156,15 @@ export default function Activities({
                   animate={{ 
                     opacity: 1, 
                     x: 0,
-                    boxShadow: isHighlighted ? (activity.owner === 'grace' ? '0 0 20px rgba(236, 72, 153, 0.4)' : '0 0 20px rgba(59, 130, 246, 0.4)') : 'none',
+                    boxShadow: isHighlighted ? (activity.owner === 'grace' ? '0 0 20px rgba(244, 114, 182, 0.4)' : '0 0 20px rgba(167, 139, 250, 0.4)') : 'none',
                     scale: isHighlighted ? 1.05 : 1
                   }}
                   className={`p-3 rounded-2xl border-l-4 shadow-sm transition-all duration-500 ${
                     isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100'
-                  } ${activity.owner === 'grace' ? 'border-l-pink-500' : 'border-l-blue-500'} ${isHighlighted ? 'z-10' : ''}`}
+                  } ${activity.owner === 'grace' ? 'border-l-pink-300' : 'border-l-violet-400'} ${isHighlighted ? 'z-10' : ''}`}
                 >
                   <div className="flex justify-between items-start mb-1">
-                    <span className={`text-[10px] font-black uppercase tracking-widest ${activity.owner === 'grace' ? 'text-pink-500' : 'text-blue-500'}`}>
+                    <span className={`text-[10px] font-black uppercase tracking-widest ${activity.owner === 'grace' ? 'text-pink-400' : 'text-violet-500'}`}>
                       {activity.owner}
                     </span>
                     <button onClick={() => removeActivity(activity.id)} className="text-gray-400 hover:text-red-500 transition-colors">
@@ -210,7 +210,7 @@ export default function Activities({
         </header>
 
         <div className="flex-1 overflow-y-auto p-4">
-          <div className="grid grid-cols-7 gap-2 md:gap-4 h-full">
+          <div className="grid grid-cols-7 gap-2 md:gap-4 md:h-full">
             {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
               <div key={day} className="text-center text-[10px] font-black uppercase tracking-widest text-gray-400 py-2">
                 {day}
@@ -242,7 +242,7 @@ export default function Activities({
                       <div 
                         key={activity.id}
                         className={`text-[8px] md:text-[9px] font-bold px-1 py-0.5 rounded truncate text-white ${
-                          activity.owner === 'grace' ? 'bg-pink-500' : 'bg-blue-500'
+                          activity.owner === 'grace' ? 'bg-pink-300' : 'bg-violet-400'
                         }`}
                       >
                         {activity.name}
@@ -295,22 +295,22 @@ export default function Activities({
                     <div className="grid grid-cols-2 gap-4">
                       <button 
                         onClick={() => setModal({ ...modal, owner: 'grace' })}
-                        className="p-6 rounded-2xl bg-pink-500 text-white font-black uppercase tracking-widest shadow-lg shadow-pink-500/20 hover:scale-105 transition-transform"
+                        className="p-6 rounded-2xl bg-pink-300 text-white font-black uppercase tracking-widest shadow-lg shadow-pink-300/20 hover:scale-105 transition-transform"
                       >
                         Grace
                       </button>
                       <button 
-                        onClick={() => setModal({ ...modal, owner: 'tanga' })}
-                        className="p-6 rounded-2xl bg-blue-500 text-white font-black uppercase tracking-widest shadow-lg shadow-blue-500/20 hover:scale-105 transition-transform"
+                        onClick={() => setModal({ ...modal, owner: 'raili' })}
+                        className="p-6 rounded-2xl bg-violet-400 text-white font-black uppercase tracking-widest shadow-lg shadow-violet-400/20 hover:scale-105 transition-transform"
                       >
-                        Tanga
+                        Raili
                       </button>
                     </div>
                   </div>
                 ) : (
                   <div className="space-y-4">
                     <div className="flex items-center justify-between">
-                      <span className={`text-[10px] font-black uppercase tracking-widest ${modal.owner === 'grace' ? 'text-pink-500' : 'text-blue-500'}`}>
+                      <span className={`text-[10px] font-black uppercase tracking-widest ${modal.owner === 'grace' ? 'text-pink-400' : 'text-violet-500'}`}>
                         Adding for {modal.owner}
                       </span>
                       <button 
@@ -365,7 +365,7 @@ export default function Activities({
                         <button 
                           onClick={saveActivity}
                           className={`flex-1 py-3 rounded-xl font-bold text-xs uppercase tracking-widest text-white shadow-lg transition-transform active:scale-95 ${
-                            modal.owner === 'grace' ? 'bg-pink-500' : 'bg-blue-500'
+                            modal.owner === 'grace' ? 'bg-pink-300' : 'bg-violet-400'
                           }`}
                         >
                           Save
