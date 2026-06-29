@@ -548,7 +548,7 @@ function AppContent() {
   };
 
   return (
-    <div className={`h-screen w-screen flex flex-col overflow-hidden transition-colors duration-300 ${isDarkMode ? 'bg-gray-900' : 'bg-gray-50'}`}>
+    <div className={`h-[100dvh] w-screen flex flex-col overflow-hidden transition-colors duration-300 ${isDarkMode ? 'bg-gray-900' : 'bg-gray-50'}`}>
       {/* Navigation Bar - Desktop */}
       <nav className={`hidden md:flex px-6 py-3 items-center justify-between shadow-sm z-50 transition-colors duration-300 ${isDarkMode ? 'bg-gray-800 border-b border-gray-700' : 'bg-white border-b border-gray-200'}`}>
         <div className="flex items-center gap-2">
@@ -626,7 +626,7 @@ function AppContent() {
       </nav>
 
       {/* Page Content */}
-      <main className="flex-1 relative overflow-hidden">
+      <main className="flex-1 relative overflow-hidden pb-[72px] md:pb-0">
         <AnimatePresence mode="wait">
           {activePage === 'dashboard' && (
             <motion.div
@@ -724,7 +724,7 @@ function AppContent() {
       </main>
 
       {/* Bottom Navigation - Mobile */}
-      <nav className={`md:hidden z-50 px-4 py-3 flex items-center justify-around shadow-[0_-4px_10px_rgba(0,0,0,0.05)] shrink-0 transition-colors duration-300 ${isDarkMode ? 'bg-gray-800 border-t border-gray-700' : 'bg-white border-t border-gray-200'}`}>
+      <nav className={`md:hidden fixed bottom-0 left-0 right-0 z-50 px-4 py-3 flex items-center justify-around shadow-[0_-4px_10px_rgba(0,0,0,0.05)] transition-colors duration-300 ${isDarkMode ? 'bg-gray-800 border-t border-gray-700' : 'bg-white border-t border-gray-200'}`}>
         <button
           onClick={() => setActivePage('dashboard')}
           className={`flex flex-col items-center gap-1 transition-all ${activePage === 'dashboard' ? 'text-purple-500' : 'text-gray-400'}`}
