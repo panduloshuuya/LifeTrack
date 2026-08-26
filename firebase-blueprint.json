@@ -1,8 +1,52 @@
 {
   "entities": {
-    "UserData": {
-      "title": "User Task Data",
-      "description": "Stores habits, weekly schedule, and reset information for a specific user (Grace or Tanga).",
+    "UserProfile": {
+      "title": "User Profile",
+      "description": "Public profile and pairing state. Searchable by any signed-in user so partners can find each other.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "displayName": { "type": "string" },
+        "displayNameLower": {
+          "type": "string",
+          "description": "Lower-cased name, used for prefix search."
+        },
+        "email": { "type": "string" },
+        "photoURL": { "type": ["string", "null"] },
+        "themeColor": {
+          "type": "string",
+          "enum": [
+            "pink",
+            "purple",
+            "blue",
+            "green",
+            "red",
+            "orange",
+            "dark-pink",
+            "dark-purple"
+          ],
+          "description": "Two members of the same pair may never share a colour."
+        },
+        "partnerId": { "type": ["string", "null"] },
+        "pairId": { "type": ["string", "null"] },
+        "hasNewMessage": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "uid",
+        "displayName",
+        "displayNameLower",
+        "email",
+        "themeColor",
+        "partnerId",
+        "pairId",
+        "createdAt"
+      ]
+    },
+
+    "TrackerData": {
+      "title": "Tracker Data",
+      "description": "One user's habits and weekly plan. Writable by the owner, readable by their partner.",
       "type": "object",
       "properties": {
         "habits": {
@@ -12,65 +56,120 @@
             "properties": {
               "id": { "type": "string" },
               "name": { "type": "string" },
-              "completed": { "type": "object" }
+              "completed": {
+                "type": "object",
+                "description": "Map of Mon..Sun to a boolean."
+              }
             }
           }
         },
         "weeklySchedule": {
           "type": "object",
-          "description": "Map of days to their classes and tasks."
+          "description": "Map of Mon..Sun to { classes: [], tasks: [] }."
         },
         "lastResetDate": {
           "type": "string",
-          "format": "date-time"
+          "format": "date-time",
+          "description": "Start of the week this tracker was last rolled over."
         }
       },
       "required": ["habits", "weeklySchedule", "lastResetDate"]
     },
-    "PeriodData": {
-      "title": "Period Tracker Data",
-      "description": "Stores the start and end dates of the period and cycle length.",
+
+    "Pair": {
+      "title": "Accountability Pair",
+      "description": "Links exactly two users. Created when a connection request is accepted, deleted when either side disconnects.",
       "type": "object",
       "properties": {
-        "startDate": { "type": "string", "format": "date-time" },
-        "endDate": { "type": "string", "format": "date-time" },
-        "cycleLength": { "type": "integer" }
+        "id": { "type": "string" },
+        "members": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "createdAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["cycleLength"]
+      "required": ["id", "members", "createdAt"]
     },
+
+    "ConnectionRequest": {
+      "title": "Connection Request",
+      "description": "A pending pairing invitation. Document id is `{fromUid}_{toUid}`, which also makes duplicate invites impossible.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "fromUid": { "type": "string" },
+        "fromName": { "type": "string" },
+        "fromEmail": { "type": "string" },
+        "fromColor": { "type": "string" },
+        "toUid": { "type": "string" },
+        "toName": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "accepted"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["fromUid", "toUid", "status", "createdAt"]
+    },
+
+    "Activity": {
+      "title": "Shared Calendar Activity",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "time": { "type": "string" },
+        "date": { "type": "string", "format": "date-time" },
+        "ownerId": {
+          "type": "string",
+          "description": "uid of the pair member this activity belongs to."
+        },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "date", "ownerId"]
+    },
+
     "ChatMessage": {
-      "title": "Chat Message",
-      "description": "A message sent in the ChatDesk chat.",
+      "title": "ChatDesk Message",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
         "text": { "type": "string" },
-        "sender": { "type": "string", "enum": ["grace", "tanga"] },
+        "senderId": { "type": "string" },
         "timestamp": { "type": "string", "format": "date-time" }
       },
-      "required": ["id", "text", "sender", "timestamp"]
+      "required": ["id", "text", "senderId", "timestamp"]
     }
   },
+
   "firestore": {
-    "/trackers/grace": {
-      "schema": "UserData",
-      "description": "Grace's task tracker data."
+    "/users/{uid}": {
+      "schema": "UserProfile",
+      "description": "One document per account, keyed by Firebase Auth uid."
     },
-    "/trackers/tanga": {
-      "schema": "UserData",
-      "description": "Tanga's task tracker data."
+    "/trackers/{uid}": {
+      "schema": "TrackerData",
+      "description": "Private habit and schedule data, readable by the owner's partner."
     },
-    "/trackers/period": {
-      "schema": "PeriodData",
-      "description": "The shared period tracker data."
+    "/pairs/{pairId}": {
+      "schema": "Pair",
+      "description": "The link between two accounts."
     },
-    "/trackers/activities": {
-      "schema": "object",
-      "description": "The list of activities."
+    "/pairs/{pairId}/activities/{activityId}": {
+      "schema": "Activity",
+      "description": "The pair's shared calendar."
     },
-    "/trackers/messages": {
-      "schema": "object",
-      "description": "The ChatDesk chat messages list."
+    "/pairs/{pairId}/messages/{messageId}": {
+      "schema": "ChatMessage",
+      "description": "The pair's shared ChatDesk thread."
+    },
+    "/connectionRequests/{fromUid_toUid}": {
+      "schema": "ConnectionRequest",
+      "description": "Pending pairing invitations."
     }
+  },
+
+  "auth": {
+    "providers": ["password", "google.com"],
+    "description": "Email/password and Google sign-in must both be enabled in the Firebase console."
   }
 }

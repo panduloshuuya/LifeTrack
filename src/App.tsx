@@ -1,851 +1,868 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
+// Root of the app and the only place that decides which screen you see.
+//
+// Access is a ladder, and each rung is a hard gate: signed in -> has a profile
+// -> has a partner. LifeTrack is only usable by a pair, so everything past the
+// pairing screen assumes both `profile` and `partner` exist.
+//
+// This is also the single owner of the Firestore subscriptions. Children take
+// plain props and call back up, so no component below reaches for the database
+// on its own.
 
 import * as React from 'react';
-import { useState, useEffect, useMemo, Component, ErrorInfo, ReactNode } from 'react';
-import { 
-  startOfWeek, 
-  isSunday, 
-  isSameDay, 
-  parseISO, 
-  format, 
-  startOfToday,
-  isAfter,
-  addDays,
-  differenceInDays
-} from 'date-fns';
-import { 
-  User, 
-  Users, 
-  Calendar, 
-  Heart, 
-  MessageSquare,
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ErrorInfo, ReactNode } from 'react';
+import { format, isBefore, isValid, parseISO, startOfToday, startOfWeek } from 'date-fns';
+import {
+  Calendar,
+  Heart,
   LayoutDashboard,
-  Settings,
-  LogIn,
   LogOut,
-  Loader2,
-  Bell,
-  Check,
+  MessageSquare,
+  Moon,
+  Settings as SettingsIcon,
   Sun,
-  Moon
+  User,
+  Users,
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
-import { onAuthStateChanged, signInWithPopup, signOut, User as FirebaseUser } from 'firebase/auth';
-import { doc, onSnapshot, setDoc } from 'firebase/firestore';
-import { auth, db, googleProvider, handleFirestoreError, OperationType, isFirebaseConfigured } from './firebase';
+import { AnimatePresence, motion } from 'motion/react';
+import {
+  onAuthStateChanged,
+  signOut,
+  User as FirebaseUser,
+} from 'firebase/auth';
+import { onSnapshot, orderBy, query, where } from 'firebase/firestore';
+import {
+  auth,
+  isFirebaseConfigured,
+  logFirestoreError,
+  missingFirebaseVars,
+  OperationType,
+} from './firebase';
+import {
+  activitiesCol,
+  clearMessageFlag,
+  addActivity,
+  deleteActivity,
+  deleteMessage,
+  emptyTracker,
+  messagesCol,
+  normalizeActivity,
+  normalizeMessage,
+  normalizeProfile,
+  normalizeRequest,
+  normalizeTracker,
+  requestsCol,
+  saveTracker,
+  sendMessage,
+  trackerDoc,
+  userDoc,
+} from './services/db';
+import { getTheme, readableOn } from './theme';
+import {
+  Activity,
+  ChatMessage,
+  ConnectionRequest,
+  DAYS,
+  TrackerData,
+  UserProfile,
+} from './types';
+import AuthScreen from './components/AuthScreen';
+import Onboarding from './components/Onboarding';
+import PairSetup from './components/PairSetup';
+import SettingsPanel from './components/SettingsPanel';
+import Dashboard from './components/Dashboard';
 import TaskTracker from './components/TaskTracker';
 import Activities from './components/Activities';
-import LoveDrops from './components/LoveDrops';
-import { UserData, PeriodData, DayOfWeek, Activity, ChatMessage } from './types';
+import ChatDesk from './components/ChatDesk';
+import { Avatar, Spinner, mutedText } from './components/ui';
 
-// Error Boundary Component
-interface ErrorBoundaryProps {
-  children: ReactNode;
-}
+// ---------------------------------------------------------------------------
+// Error boundary
+// ---------------------------------------------------------------------------
 
-interface ErrorBoundaryState {
-  hasError: boolean;
-  error: Error | null;
-}
-
-class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  constructor(props: ErrorBoundaryProps) {
+class ErrorBoundary extends React.Component<
+  { children: ReactNode },
+  { error: Error | null }
+> {
+  constructor(props: { children: ReactNode }) {
     super(props);
-    this.state = { hasError: false, error: null };
+    this.state = { error: null };
   }
 
-  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
-    return { hasError: true, error };
+  static getDerivedStateFromError(error: Error) {
+    return { error };
   }
 
-  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error("Uncaught error:", error, errorInfo);
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error('Uncaught error:', error, info);
   }
 
   render() {
-    if (this.state.hasError) {
+    if (this.state.error) {
       return (
-        <div className="h-screen w-screen flex flex-col items-center justify-center bg-red-50 p-8 text-center">
+        <div className="h-full w-full flex flex-col items-center justify-center bg-red-50 p-8 text-center overflow-y-auto">
           <h1 className="text-2xl font-bold text-red-600 mb-4">Something went wrong</h1>
           <pre className="bg-white p-4 rounded border border-red-200 text-sm overflow-auto max-w-full text-left">
-            {this.state.error?.message}
+            {this.state.error.message}
           </pre>
-          <button 
+          <button
             onClick={() => window.location.reload()}
             className="mt-6 px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
           >
-            Reload Application
+            Reload application
           </button>
         </div>
       );
     }
-
     return this.props.children;
   }
 }
 
-const INITIAL_USER_DATA: UserData = {
-  habits: [],
-  weeklySchedule: {
-    Sun: { classes: [], tasks: [] },
-    Mon: { classes: [], tasks: [] },
-    Tue: { classes: [], tasks: [] },
-    Wed: { classes: [], tasks: [] },
-    Thu: { classes: [], tasks: [] },
-    Fri: { classes: [], tasks: [] },
-    Sat: { classes: [], tasks: [] },
-  },
-  lastResetDate: startOfWeek(new Date(), { weekStartsOn: 6 }).toISOString(), // Reset on Saturdays
-  hasNewMessage: false,
-};
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
-const INITIAL_PERIOD_DATA: PeriodData = {
-  startDate: null,
-  endDate: null,
-  cycleLength: 28,
-};
+type Page = 'dashboard' | 'me' | 'partner' | 'activities' | 'chat' | 'settings';
 
-type Page = 'dashboard' | 'grace' | 'raili' | 'activities' | 'love-drops';
+/**
+ * Habits and tasks roll over once per calendar week (weeks start on Monday, the
+ * same order the planner columns use). Comparing against the start of the
+ * current week makes the check idempotent, so two devices open at once cannot
+ * reset twice.
+ */
+function needsWeeklyReset(lastResetDate: string, now: Date): boolean {
+  const last = parseISO(lastResetDate);
+  if (!isValid(last)) return true;
+  return isBefore(last, startOfWeek(now, { weekStartsOn: 1 }));
+}
 
-function Dashboard({ 
-  graceData, 
-  railiData, 
-  activities,
-  isDarkMode,
-  onUpdateGrace,
-  onUpdateRaili
-}: { 
-  graceData: UserData, 
-  railiData: UserData, 
-  activities: Activity[],
-  isDarkMode: boolean,
-  onUpdateGrace: (data: UserData) => void,
-  onUpdateRaili: (data: UserData) => void
-}) {
-  const today = startOfToday();
-  const dayName = format(today, 'EEE') as DayOfWeek;
-  
-  const upcomingActivities = useMemo(() => {
-    return activities
-      .filter(a => {
-        if (!a || !a.date) return false;
-        try {
-          const d = parseISO(a.date);
-          if (isNaN(d.getTime())) return false;
-          const today = startOfToday();
-          return isAfter(d, today) || isSameDay(d, today);
-        } catch {
-          return false;
-        }
-      })
-      .sort((a, b) => {
-        try {
-          const timeA = parseISO(a.date).getTime();
-          const timeB = parseISO(b.date).getTime();
-          if (isNaN(timeA) || isNaN(timeB)) return 0;
-          return timeA - timeB;
-        } catch {
-          return 0;
-        }
-      })
-      .slice(0, 4);
-  }, [activities]);
-  
-  const calculatePercentage = (data: UserData) => {
-    if (data.habits.length === 0) return 0;
-    let total = data.habits.length * 7;
-    let completed = 0;
-    const days: DayOfWeek[] = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    data.habits.forEach(habit => {
-      days.forEach(day => {
-        if (habit.completed[day]) completed++;
-      });
-    });
-    return Math.round((completed / total) * 100);
+function resetTracker(data: TrackerData): TrackerData {
+  const weeklySchedule = { ...data.weeklySchedule };
+  DAYS.forEach((day) => {
+    // Classes repeat every week; only the one-off tasks are cleared.
+    weeklySchedule[day] = { ...weeklySchedule[day], tasks: [] };
+  });
+  return {
+    ...data,
+    weeklySchedule,
+    habits: data.habits.map((habit) => ({
+      ...habit,
+      completed: DAYS.reduce(
+        (acc, day) => ({ ...acc, [day]: false }),
+        {} as (typeof habit)['completed'],
+      ),
+    })),
+    lastResetDate: startOfToday().toISOString(),
   };
+}
 
-  const graceProgress = calculatePercentage(graceData);
-  const railiProgress = calculatePercentage(railiData);
-
+/**
+ * The centred single-column layout every pre-dashboard screen uses: loading,
+ * setup notices and recoverable errors.
+ */
+function CenteredPane({
+  isDarkMode,
+  children,
+}: {
+  isDarkMode: boolean;
+  children: ReactNode;
+}) {
   return (
-    <div className={`h-full w-full p-4 md:p-6 overflow-y-auto transition-colors duration-300 ${isDarkMode ? 'bg-gray-900' : 'bg-gray-50'}`}>
-      <div className="max-w-6xl mx-auto space-y-4 md:space-y-6 pb-24 md:pb-0">
-        <header className="flex flex-col md:flex-row md:items-center justify-between gap-2 md:gap-4">
-          <div>
-            <h2 className={`text-2xl md:text-4xl font-black uppercase tracking-tighter leading-none ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Habit Tracker Hub</h2>
-            <p className={`text-[10px] md:text-base font-medium italic mt-0.5 md:mt-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>"Habit and Task accountability tracker. Let's strive for Godly excellence!"</p>
-          </div>
-          <div className="flex md:block items-center justify-between bg-purple-500/10 md:bg-transparent p-2 md:p-0 rounded-xl">
-            <p className="text-[10px] font-black text-purple-500 uppercase tracking-widest">{format(today, 'EEEE')}</p>
-            <p className={`text-sm md:text-lg font-bold ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>{format(today, 'MMMM d')}</p>
-          </div>
-        </header>
-
-        {/* Main Accountability Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
-          {/* Grace's Column */}
-          <div className="space-y-4 md:space-y-6">
-            <motion.div 
-              whileHover={{ y: -5 }}
-              className={`p-4 md:p-6 rounded-3xl md:rounded-[2rem] shadow-lg border transition-colors duration-300 ${isDarkMode ? 'bg-gray-800 border-gray-700 shadow-none' : 'bg-white border-pink-100/50 shadow-pink-100/20'}`}
-            >
-              <div className="flex items-center justify-between mb-3 md:mb-6">
-                <div className="flex items-center gap-2 md:gap-3">
-                  <div className={`w-10 h-10 md:w-12 md:h-12 rounded-xl md:rounded-2xl flex items-center justify-center ${isDarkMode ? 'bg-pink-900/10' : 'bg-pink-50'}`}>
-                    <User className="text-pink-300 md:w-6 md:h-6" size={18} />
-                  </div>
-                  <div>
-                    <h3 className={`text-base md:text-xl font-bold ${isDarkMode ? 'text-gray-100' : 'text-gray-800'}`}>Grace</h3>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className="text-lg md:text-2xl font-black text-pink-300 leading-none">{graceProgress}%</p>
-                  <p className="text-[8px] md:text-[10px] font-bold text-gray-400 uppercase">Weekly</p>
-                </div>
-              </div>
-
-              {graceData.hasNewMessage && (
-                <motion.div 
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  className="mb-4 p-2.5 bg-red-600 text-white rounded-2xl flex items-center justify-between gap-2 shadow-lg shadow-red-600/30"
-                >
-                  <div className="flex items-center gap-2 pl-1">
-                    <Bell size={14} className="animate-bounce" />
-                    <span className="text-[9px] font-black uppercase tracking-widest">New ChatDesk Message!</span>
-                  </div>
-                  <button 
-                    onClick={() => onUpdateGrace({ ...graceData, hasNewMessage: false })}
-                    className="p-1 bg-white text-red-600 hover:bg-red-50 rounded-lg transition-all shadow-sm active:scale-95 flex items-center justify-center"
-                  >
-                    <Check size={11} strokeWidth={4} />
-                  </button>
-                </motion.div>
-              )}
-
-              <div className={`w-full h-1.5 md:h-2 rounded-full overflow-hidden mb-4 md:mb-6 ${isDarkMode ? 'bg-gray-700' : 'bg-gray-100'}`}>
-                <motion.div 
-                  initial={{ width: 0 }}
-                  animate={{ width: `${graceProgress}%` }}
-                  className="h-full bg-pink-300"
-                />
-              </div>
-
-              <div className="space-y-3 md:space-y-4">
-                <h4 className={`text-[9px] md:text-[10px] font-black uppercase tracking-widest border-b pb-1 md:pb-2 ${isDarkMode ? 'text-gray-500 border-gray-700' : 'text-gray-400 border-gray-100'}`}>Today's Focus</h4>
-                <div className="space-y-2 max-h-40 md:max-h-48 overflow-y-auto pr-1 md:pr-2">
-                  {graceData.weeklySchedule[dayName].tasks.length === 0 ? (
-                    <p className="text-[10px] md:text-xs text-gray-400 italic">No tasks set for today.</p>
-                  ) : (
-                    graceData.weeklySchedule[dayName].tasks.map(t => (
-                      <div key={t.id} className={`flex items-center gap-2 p-2 rounded-xl border transition-colors duration-300 ${isDarkMode ? 'bg-gray-900/50 border-gray-700' : 'bg-gray-50 border-gray-100'}`}>
-                        <div className={`w-1.5 h-1.5 md:w-2 md:h-2 rounded-full shrink-0 ${t.completed ? 'bg-pink-300' : 'bg-gray-300'}`} />
-                        <span className={`text-[10px] md:text-xs font-medium break-words whitespace-normal leading-tight ${t.completed ? 'line-through text-gray-500' : (isDarkMode ? 'text-gray-300' : 'text-gray-700')}`}>
-                          {t.name}
-                        </span>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            </motion.div>
-          </div>
-
-          {/* Raili's Column */}
-          <div className="space-y-4 md:space-y-6">
-            <motion.div 
-              whileHover={{ y: -5 }}
-              className={`p-4 md:p-6 rounded-3xl md:rounded-[2rem] shadow-lg border transition-colors duration-300 ${isDarkMode ? 'bg-gray-800 border-gray-700 shadow-none' : 'bg-white border-violet-100 shadow-violet-100/30'}`}
-            >
-              <div className="flex items-center justify-between mb-3 md:mb-6">
-                <div className="flex items-center gap-2 md:gap-3">
-                  <div className={`w-10 h-10 md:w-12 md:h-12 rounded-xl md:rounded-2xl flex items-center justify-center ${isDarkMode ? 'bg-violet-900/20' : 'bg-violet-100/60'}`}>
-                    <Users className="text-violet-400 md:w-6 md:h-6" size={18} />
-                  </div>
-                  <div>
-                    <h3 className={`text-base md:text-xl font-bold ${isDarkMode ? 'text-gray-100' : 'text-gray-800'}`}>Raili</h3>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className="text-lg md:text-2xl font-black text-violet-400 leading-none">{railiProgress}%</p>
-                  <p className="text-[8px] md:text-[10px] font-bold text-gray-400 uppercase">Weekly</p>
-                </div>
-              </div>
-
-              {railiData.hasNewMessage && (
-                <motion.div 
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  className="mb-4 p-2.5 bg-red-600 text-white rounded-2xl flex items-center justify-between gap-2 shadow-lg shadow-red-600/30"
-                >
-                  <div className="flex items-center gap-2 pl-1">
-                    <Bell size={14} className="animate-bounce" />
-                    <span className="text-[9px] font-black uppercase tracking-widest">New ChatDesk Message!</span>
-                  </div>
-                  <button 
-                    onClick={() => onUpdateRaili({ ...railiData, hasNewMessage: false })}
-                    className="p-1 bg-white text-red-600 hover:bg-red-50 rounded-lg transition-all shadow-sm active:scale-95 flex items-center justify-center"
-                  >
-                    <Check size={11} strokeWidth={4} />
-                  </button>
-                </motion.div>
-              )}
-
-              <div className={`w-full h-1.5 md:h-2 rounded-full overflow-hidden mb-4 md:mb-6 ${isDarkMode ? 'bg-gray-700' : 'bg-gray-100'}`}>
-                <motion.div 
-                  initial={{ width: 0 }}
-                  animate={{ width: `${railiProgress}%` }}
-                  className="h-full bg-violet-400"
-                />
-              </div>
-
-              <div className="space-y-3 md:space-y-4">
-                <h4 className={`text-[9px] md:text-[10px] font-black uppercase tracking-widest border-b pb-1 md:pb-2 ${isDarkMode ? 'text-gray-500 border-gray-700' : 'text-gray-400 border-gray-100'}`}>Today's Focus</h4>
-                <div className="space-y-2 max-h-40 md:max-h-48 overflow-y-auto pr-1 md:pr-2">
-                  {railiData.weeklySchedule[dayName].tasks.length === 0 ? (
-                    <p className="text-[10px] md:text-xs text-gray-400 italic">No tasks set for today.</p>
-                  ) : (
-                    railiData.weeklySchedule[dayName].tasks.map(t => (
-                      <div key={t.id} className={`flex items-center gap-2 p-2 rounded-xl border transition-colors duration-300 ${isDarkMode ? 'bg-gray-900/50 border-gray-700' : 'bg-gray-50 border-gray-100'}`}>
-                        <div className={`w-1.5 h-1.5 md:w-2 md:h-2 rounded-full shrink-0 ${t.completed ? 'bg-violet-400' : 'bg-gray-300'}`} />
-                        <span className={`text-[10px] md:text-xs font-medium break-words whitespace-normal leading-tight ${t.completed ? 'line-through text-gray-500' : (isDarkMode ? 'text-gray-300' : 'text-gray-700')}`}>
-                          {t.name}
-                        </span>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            </motion.div>
-          </div>
-
-          {/* Upcoming Activities Column */}
-          <div className="space-y-4 md:space-y-6">
-            <motion.div 
-              whileHover={{ y: -5 }}
-              className={`p-4 md:p-6 rounded-3xl md:rounded-[2rem] shadow-lg border transition-colors duration-300 ${isDarkMode ? 'bg-gray-800 border-gray-700 shadow-none' : 'bg-white border-gray-100 shadow-gray-100/50'}`}
-            >
-              <div className="flex items-center justify-between mb-3 md:mb-6">
-                <div className="flex items-center gap-2 md:gap-3">
-                  <div className={`w-10 h-10 md:w-12 md:h-12 rounded-xl md:rounded-2xl flex items-center justify-center ${isDarkMode ? 'bg-gray-700' : 'bg-gray-100'}`}>
-                    <Calendar className="text-gray-500 md:w-6 md:h-6" size={18} />
-                  </div>
-                  <div>
-                    <h3 className={`text-base md:text-xl font-bold ${isDarkMode ? 'text-gray-100' : 'text-gray-800'}`}>Activities</h3>
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-3 md:space-y-4">
-                <h4 className={`text-[9px] md:text-[10px] font-black uppercase tracking-widest border-b pb-1 md:pb-2 ${isDarkMode ? 'text-gray-500 border-gray-700' : 'text-gray-400 border-gray-100'}`}>Upcoming Events</h4>
-                <div className="space-y-3 max-h-80 md:max-h-96 overflow-y-auto pr-1 md:pr-2">
-                  {upcomingActivities.length === 0 ? (
-                    <p className="text-[10px] md:text-xs text-gray-400 italic">No upcoming activities.</p>
-                  ) : (
-                    upcomingActivities.map(a => (
-                      <div key={a.id} className={`p-3 rounded-xl border-l-4 transition-colors duration-300 ${isDarkMode ? 'bg-gray-900/50 border-gray-700' : 'bg-gray-50 border-gray-100'} ${a.owner === 'grace' ? 'border-l-pink-300' : 'border-l-violet-400'}`}>
-                        <div className="flex justify-between items-center mb-1">
-                          <span className={`text-[8px] font-black uppercase tracking-widest ${a.owner === 'grace' ? 'text-pink-300' : 'text-violet-400'}`}>{a.owner}</span>
-                          <span className="text-[8px] font-bold text-gray-400">{format(parseISO(a.date), 'MMM d')}</span>
-                        </div>
-                        <p className={`text-[11px] font-bold break-words whitespace-normal leading-tight ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>{a.name}</p>
-                        <p className="text-[9px] text-gray-400 font-medium">{a.time}</p>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            </motion.div>
-          </div>
-        </div>
+    <div
+      className={`h-full w-full flex items-center justify-center p-6 overflow-y-auto ${
+        isDarkMode ? 'bg-gray-900' : 'bg-gray-50'
+      }`}
+    >
+      <div className="max-w-md w-full flex flex-col items-center text-center gap-4">
+        {children}
       </div>
     </div>
   );
 }
 
-function AppContent() {
-  const [activePage, setActivePage] = useState<Page>('dashboard');
-  const [isDarkMode, setIsDarkMode] = useState(() => {
-    const saved = localStorage.getItem('darkMode');
-    return saved ? JSON.parse(saved) : false;
-  });
-  
-  const [graceData, setGraceData] = useState<UserData>(() => {
-    const saved = localStorage.getItem('tracker_grace');
-    return saved ? JSON.parse(saved) : INITIAL_USER_DATA;
-  });
-  const [railiData, setRailiData] = useState<UserData>(() => {
-    const saved = localStorage.getItem('tracker_raili');
-    return saved ? JSON.parse(saved) : INITIAL_USER_DATA;
-  });
-  const [periodData, setPeriodData] = useState<PeriodData>(() => {
-    const saved = localStorage.getItem('tracker_period');
-    return saved ? JSON.parse(saved) : INITIAL_PERIOD_DATA;
-  });
-  const [activities, setActivities] = useState<Activity[]>(() => {
-    const saved = localStorage.getItem('tracker_activities');
-    return saved ? JSON.parse(saved) : [];
-  });
-  const [messages, setMessages] = useState<ChatMessage[]>(() => {
-    const saved = localStorage.getItem('tracker_messages');
-    return saved ? JSON.parse(saved) : [];
-  });
-  const [highlightDate, setHighlightDate] = useState<string | null>(null);
-
-  useEffect(() => {
-    localStorage.setItem('darkMode', JSON.stringify(isDarkMode));
-    if (isDarkMode) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-  }, [isDarkMode]);
-
-  // Firestore Real-time Sync - Public Access (only runs if Firebase is configured)
-  useEffect(() => {
-    if (!isFirebaseConfigured) return;
-
-    const unsubGrace = onSnapshot(doc(db, 'trackers', 'grace'), (snapshot) => {
-      if (snapshot.exists()) {
-        const data = snapshot.data() as UserData;
-        setGraceData(data);
-        localStorage.setItem('tracker_grace', JSON.stringify(data));
-      } else {
-        setDoc(doc(db, 'trackers', 'grace'), INITIAL_USER_DATA).catch(e => handleFirestoreError(e, OperationType.WRITE, 'trackers/grace'));
-      }
-    }, (e) => handleFirestoreError(e, OperationType.GET, 'trackers/grace'));
-
-    const unsubRaili = onSnapshot(doc(db, 'trackers', 'raili'), (snapshot) => {
-      if (snapshot.exists()) {
-        const data = snapshot.data() as UserData;
-        setRailiData(data);
-        localStorage.setItem('tracker_raili', JSON.stringify(data));
-      } else {
-        setDoc(doc(db, 'trackers', 'raili'), INITIAL_USER_DATA).catch(e => handleFirestoreError(e, OperationType.WRITE, 'trackers/raili'));
-      }
-    }, (e) => handleFirestoreError(e, OperationType.GET, 'trackers/raili'));
-
-    const unsubPeriod = onSnapshot(doc(db, 'trackers', 'period'), (snapshot) => {
-      if (snapshot.exists()) {
-        const data = snapshot.data() as PeriodData;
-        setPeriodData(data);
-        localStorage.setItem('tracker_period', JSON.stringify(data));
-      } else {
-        setDoc(doc(db, 'trackers', 'period'), INITIAL_PERIOD_DATA).catch(e => handleFirestoreError(e, OperationType.WRITE, 'trackers/period'));
-      }
-    }, (e) => handleFirestoreError(e, OperationType.GET, 'trackers/period'));
-
-    const unsubActivities = onSnapshot(doc(db, 'trackers', 'activities'), (snapshot) => {
-      if (snapshot.exists()) {
-        const data = snapshot.data();
-        const list = data.list || [];
-        setActivities(list);
-        localStorage.setItem('tracker_activities', JSON.stringify(list));
-      } else {
-        setDoc(doc(db, 'trackers', 'activities'), { list: [] }).catch(e => handleFirestoreError(e, OperationType.WRITE, 'trackers/activities'));
-      }
-    }, (e) => handleFirestoreError(e, OperationType.GET, 'trackers/activities'));
-
-    const unsubMessages = onSnapshot(doc(db, 'trackers', 'messages'), (snapshot) => {
-      if (snapshot.exists()) {
-        const data = snapshot.data();
-        const list = data.list || [];
-        setMessages(list);
-        localStorage.setItem('tracker_messages', JSON.stringify(list));
-      } else {
-        setDoc(doc(db, 'trackers', 'messages'), { list: [] }).catch(e => handleFirestoreError(e, OperationType.WRITE, 'trackers/messages'));
-      }
-    }, (e) => handleFirestoreError(e, OperationType.GET, 'trackers/messages'));
-
-    return () => {
-      unsubGrace();
-      unsubRaili();
-      unsubPeriod();
-      unsubActivities();
-      unsubMessages();
-    };
-  }, []);
-
-  // Wednesday Reset Logic - Helper to clear tasks/checkboxes while keeping classes/habits
-  const getResetData = (data: UserData): UserData => {
-    // 1. Reset Weekly Schedule: Clear tasks, preserve classes
-    const newSchedule = { ...data.weeklySchedule };
-    (Object.keys(newSchedule) as DayOfWeek[]).forEach((day) => {
-      newSchedule[day] = {
-        ...newSchedule[day],
-        tasks: [], // We only clear tasks as requested
-      };
-    });
-
-    // 2. Reset Habits: Clear daily checkboxes, preserve habit names
-    const newHabits = data.habits.map((habit) => ({
-      ...habit,
-      completed: {
-        Sun: false, Mon: false, Tue: false, Wed: false, Thu: false, Fri: false, Sat: false
-      },
-    }));
-
-    return {
-      ...data,
-      weeklySchedule: newSchedule,
-      habits: newHabits,
-      lastResetDate: startOfToday().toISOString(),
-    };
-  };
-
-  // Reset Monitor for Grace
-  useEffect(() => {
-    if (!graceData.lastResetDate) return;
-
-    const checkReset = () => {
-      const today = startOfToday();
-      const lastReset = parseISO(graceData.lastResetDate);
-      const isSaturday = format(today, 'EEE') === 'Sat';
-      const alreadyResetToday = isSameDay(today, lastReset);
-      const daysSinceLastReset = differenceInDays(today, lastReset);
-
-      if ((isSaturday && !alreadyResetToday) || daysSinceLastReset >= 7) {
-        handleUpdateGrace(getResetData(graceData));
-      }
-    };
-
-    checkReset();
-    const interval = setInterval(checkReset, 1000 * 60 * 60);
-    return () => clearInterval(interval);
-  }, [graceData.lastResetDate, graceData.habits, graceData.weeklySchedule]);
-
-  // Reset Monitor for Raili
-  useEffect(() => {
-    if (!railiData.lastResetDate) return;
-
-    const checkReset = () => {
-      const today = startOfToday();
-      const lastReset = parseISO(railiData.lastResetDate);
-      const isSaturday = format(today, 'EEE') === 'Sat';
-      const alreadyResetToday = isSameDay(today, lastReset);
-      const daysSinceLastReset = differenceInDays(today, lastReset);
-
-      if ((isSaturday && !alreadyResetToday) || daysSinceLastReset >= 7) {
-        handleUpdateRaili(getResetData(railiData));
-      }
-    };
-
-    checkReset();
-    const interval = setInterval(checkReset, 1000 * 60 * 60);
-    return () => clearInterval(interval);
-  }, [railiData.lastResetDate, railiData.habits, railiData.weeklySchedule]);
-
-  const handleUpdateGrace = (newData: UserData) => {
-    setGraceData(newData);
-    localStorage.setItem('tracker_grace', JSON.stringify(newData));
-    if (isFirebaseConfigured) {
-      setDoc(doc(db, 'trackers', 'grace'), newData).catch(e => handleFirestoreError(e, OperationType.WRITE, 'trackers/grace'));
-    }
-  };
-
-  const handleUpdateRaili = (newData: UserData) => {
-    setRailiData(newData);
-    localStorage.setItem('tracker_raili', JSON.stringify(newData));
-    if (isFirebaseConfigured) {
-      setDoc(doc(db, 'trackers', 'raili'), newData).catch(e => handleFirestoreError(e, OperationType.WRITE, 'trackers/raili'));
-    }
-  };
-
-  const handleUpdatePeriod = (start: string | null, end: string | null) => {
-    const newData = { ...periodData, startDate: start, endDate: end };
-    setPeriodData(newData);
-    localStorage.setItem('tracker_period', JSON.stringify(newData));
-    if (isFirebaseConfigured) {
-      setDoc(doc(db, 'trackers', 'period'), newData).catch(e => handleFirestoreError(e, OperationType.WRITE, 'trackers/period'));
-    }
-  };
-
-  const handleUpdateActivities = (newActivities: Activity[]) => {
-    setActivities(newActivities);
-    localStorage.setItem('tracker_activities', JSON.stringify(newActivities));
-    if (isFirebaseConfigured) {
-      setDoc(doc(db, 'trackers', 'activities'), { list: newActivities }).catch(e => handleFirestoreError(e, OperationType.WRITE, 'trackers/activities'));
-    }
-  };
-
-  const handleSendMessage = (text: string, sender: 'grace' | 'raili') => {
-    const newMessage: ChatMessage = {
-      id: crypto.randomUUID(),
-      text,
-      sender,
-      timestamp: new Date().toISOString(),
-    };
-    const newMessages = [...messages, newMessage];
-    setMessages(newMessages);
-    localStorage.setItem('tracker_messages', JSON.stringify(newMessages));
-    if (isFirebaseConfigured) {
-      setDoc(doc(db, 'trackers', 'messages'), { list: newMessages }).catch(e => handleFirestoreError(e, OperationType.WRITE, 'trackers/messages'));
-    }
-
-    // Notify the other user
-    if (sender === 'grace') {
-      const newRailiData = { ...railiData, hasNewMessage: true };
-      setRailiData(newRailiData);
-      localStorage.setItem('tracker_raili', JSON.stringify(newRailiData));
-      if (isFirebaseConfigured) {
-        setDoc(doc(db, 'trackers', 'raili'), newRailiData).catch(e => handleFirestoreError(e, OperationType.WRITE, 'trackers/raili'));
-      }
-    } else {
-      const newGraceData = { ...graceData, hasNewMessage: true };
-      setGraceData(newGraceData);
-      localStorage.setItem('tracker_grace', JSON.stringify(newGraceData));
-      if (isFirebaseConfigured) {
-        setDoc(doc(db, 'trackers', 'grace'), newGraceData).catch(e => handleFirestoreError(e, OperationType.WRITE, 'trackers/grace'));
-      }
-    }
-  };
-
-  const handleDeleteMessage = (id: string) => {
-    const newMessages = messages.filter(m => m.id !== id);
-    setMessages(newMessages);
-    localStorage.setItem('tracker_messages', JSON.stringify(newMessages));
-    if (isFirebaseConfigured) {
-      setDoc(doc(db, 'trackers', 'messages'), { list: newMessages }).catch(e => handleFirestoreError(e, OperationType.WRITE, 'trackers/messages'));
-    }
-  };
-
-  const handleActivityClick = (date: string) => {
-    setHighlightDate(date);
-    setActivePage('activities');
-  };
-
+function PaneTitle({ isDarkMode, children }: { isDarkMode: boolean; children: ReactNode }) {
   return (
-    <div className={`h-[100dvh] w-screen flex flex-col overflow-hidden transition-colors duration-300 ${isDarkMode ? 'bg-gray-900' : 'bg-gray-50'}`}>
-      {/* Navigation Bar - Desktop */}
-      <nav className={`hidden md:flex px-6 py-3 items-center justify-between shadow-sm z-50 transition-colors duration-300 ${isDarkMode ? 'bg-gray-800 border-b border-gray-700' : 'bg-white border-b border-gray-200'}`}>
-        <div className="flex items-center gap-2">
-          <div className={`p-2 rounded-lg ${isDarkMode ? 'bg-purple-900/50' : 'bg-purple-100'}`}>
-            <Heart className="text-purple-500" size={20} />
-          </div>
-          <span className={`font-bold text-lg tracking-tight ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>Habit Tracker</span>
-        </div>
-
-        <div className={`flex items-center gap-2 p-1 rounded-xl transition-colors duration-300 ${isDarkMode ? 'bg-gray-900' : 'bg-gray-100'}`}>
-          <button
-            onClick={() => setActivePage('dashboard')}
-            className={`
-              flex items-center gap-2 px-4 py-2 rounded-lg transition-all text-sm font-bold
-              ${activePage === 'dashboard' ? (isDarkMode ? 'bg-gray-800 shadow-sm text-purple-400' : 'bg-white shadow-sm text-purple-600') : 'text-gray-500 hover:text-gray-700'}
-            `}
-          >
-            <LayoutDashboard size={18} />
-            Dashboard
-          </button>
-          <button
-            onClick={() => setActivePage('grace')}
-            className={`
-              flex items-center gap-2 px-4 py-2 rounded-lg transition-all text-sm font-bold
-              ${activePage === 'grace' ? (isDarkMode ? 'bg-gray-800 shadow-sm text-pink-300' : 'bg-white shadow-sm text-pink-400') : 'text-gray-500 hover:text-gray-700'}
-            `}
-          >
-            <User size={18} />
-            Grace
-          </button>
-          <button
-            onClick={() => setActivePage('raili')}
-            className={`
-              flex items-center gap-2 px-4 py-2 rounded-lg transition-all text-sm font-bold
-              ${activePage === 'raili' ? (isDarkMode ? 'bg-gray-800 shadow-sm text-violet-400' : 'bg-white shadow-sm text-violet-500') : 'text-gray-500 hover:text-gray-700'}
-            `}
-          >
-            <Users size={18} />
-            Raili
-          </button>
-          <button
-            onClick={() => setActivePage('activities')}
-            className={`
-              flex items-center gap-2 px-4 py-2 rounded-lg transition-all text-sm font-bold
-              ${activePage === 'activities' ? (isDarkMode ? 'bg-gray-800 shadow-sm text-purple-400' : 'bg-white shadow-sm text-purple-600') : 'text-gray-500 hover:text-gray-700'}
-            `}
-          >
-            <Calendar size={18} />
-            Activities
-          </button>
-          <button
-            onClick={() => setActivePage('love-drops')}
-            className={`
-              flex items-center gap-2 px-4 py-2 rounded-lg transition-all text-sm font-bold
-              ${activePage === 'love-drops' ? (isDarkMode ? 'bg-gray-800 shadow-sm text-pink-400' : 'bg-white shadow-sm text-pink-600') : 'text-gray-500 hover:text-gray-700'}
-            `}
-          >
-            <MessageSquare size={18} />
-            ChatDesk
-          </button>
-        </div>
-
-        <div className="flex items-center gap-4">
-          <button 
-            onClick={() => setIsDarkMode(!isDarkMode)}
-            className={`p-2 rounded-lg transition-colors ${isDarkMode ? 'bg-gray-700 text-yellow-400 hover:bg-gray-600' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
-          >
-            {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
-          </button>
-          <div className="text-right hidden sm:block">
-            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{format(new Date(), 'EEEE')}</p>
-            <p className={`text-sm font-bold ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>{format(new Date(), 'MMMM d, yyyy')}</p>
-          </div>
-        </div>
-      </nav>
-
-      {/* Page Content */}
-      <main className="flex-1 relative overflow-hidden">
-        <AnimatePresence mode="wait">
-          {activePage === 'dashboard' && (
-            <motion.div
-              key="dashboard"
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 1.05 }}
-              className="absolute inset-x-0 top-0 bottom-[72px] md:bottom-0"
-            >
-              <Dashboard 
-                graceData={graceData}
-                railiData={railiData}
-                activities={activities}
-                isDarkMode={isDarkMode}
-                onUpdateGrace={handleUpdateGrace}
-                onUpdateRaili={handleUpdateRaili}
-              />
-            </motion.div>
-          )}
-
-          {activePage === 'activities' && (
-            <motion.div
-              key="activities"
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 1.05 }}
-              className="absolute inset-x-0 top-0 bottom-[72px] md:bottom-0"
-            >
-              <Activities 
-                activities={activities}
-                onUpdate={onUpdate => handleUpdateActivities(onUpdate)}
-                isDarkMode={isDarkMode}
-                highlightDate={highlightDate}
-                onClearHighlight={() => setHighlightDate(null)}
-              />
-            </motion.div>
-          )}
-
-          {activePage === 'grace' && (
-            <motion.div
-              key="grace"
-              initial={{ opacity: 0, scale: 0.98 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 1.02 }}
-              className="absolute inset-x-0 top-0 bottom-[72px] md:bottom-0"
-            >
-              <TaskTracker 
-                name="Grace"
-                colorScheme="pink"
-                data={graceData}
-                onUpdate={handleUpdateGrace}
-                isDarkMode={isDarkMode}
-                activities={activities}
-                onActivityClick={handleActivityClick}
-              />
-            </motion.div>
-          )}
-
-          {activePage === 'raili' && (
-            <motion.div
-              key="raili"
-              initial={{ opacity: 0, scale: 0.98 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 1.02 }}
-              className="absolute inset-x-0 top-0 bottom-[72px] md:bottom-0"
-            >
-              <TaskTracker 
-                name="Raili"
-                colorScheme="blue"
-                data={railiData}
-                onUpdate={handleUpdateRaili}
-                isDarkMode={isDarkMode}
-                activities={activities}
-                onActivityClick={handleActivityClick}
-              />
-            </motion.div>
-          )}
-          {activePage === 'love-drops' && (
-            <motion.div
-              key="love-drops"
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 1.05 }}
-              className="absolute inset-x-0 top-0 bottom-[72px] md:bottom-0"
-            >
-              <LoveDrops 
-                messages={messages}
-                onSendMessage={handleSendMessage}
-                onDeleteMessage={handleDeleteMessage}
-                isDarkMode={isDarkMode}
-              />
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </main>
-
-      {/* Bottom Navigation - Mobile */}
-      <nav className={`md:hidden fixed bottom-0 left-0 right-0 z-50 px-4 py-3 flex items-center justify-around shadow-[0_-4px_10px_rgba(0,0,0,0.05)] transition-colors duration-300 ${isDarkMode ? 'bg-gray-800 border-t border-gray-700' : 'bg-white border-t border-gray-200'}`}>
-        <button
-          onClick={() => setActivePage('dashboard')}
-          className={`flex flex-col items-center gap-1 transition-all ${activePage === 'dashboard' ? 'text-purple-500' : 'text-gray-400'}`}
-        >
-          <LayoutDashboard size={24} />
-          <span className="text-[10px] font-bold uppercase tracking-tighter">Home</span>
-        </button>
-        <button
-          onClick={() => setActivePage('grace')}
-          className={`flex flex-col items-center gap-1 transition-all ${activePage === 'grace' ? 'text-pink-300' : 'text-gray-400'}`}
-        >
-          <User size={24} />
-          <span className="text-[10px] font-bold uppercase tracking-tighter">Grace</span>
-        </button>
-        <button
-          onClick={() => setActivePage('raili')}
-          className={`flex flex-col items-center gap-1 transition-all ${activePage === 'raili' ? 'text-violet-400' : 'text-gray-400'}`}
-        >
-          <Users size={24} />
-          <span className="text-[10px] font-bold uppercase tracking-tighter">Raili</span>
-        </button>
-        <button
-          onClick={() => setActivePage('activities')}
-          className={`flex flex-col items-center gap-1 transition-all ${activePage === 'activities' ? 'text-purple-500' : 'text-gray-400'}`}
-        >
-          <Calendar size={24} />
-          <span className="text-[10px] font-bold uppercase tracking-tighter">Events</span>
-        </button>
-        <button
-          onClick={() => setActivePage('love-drops')}
-          className={`flex flex-col items-center gap-1 transition-all ${activePage === 'love-drops' ? 'text-pink-400' : 'text-gray-400'}`}
-        >
-          <MessageSquare size={24} className={activePage === 'love-drops' ? 'fill-pink-400' : ''} />
-          <span className="text-[10px] font-bold uppercase tracking-tighter">ChatDesk</span>
-        </button>
-        <button
-          onClick={() => setIsDarkMode(!isDarkMode)}
-          className={`flex flex-col items-center gap-1 transition-all ${isDarkMode ? 'text-yellow-400' : 'text-gray-400'}`}
-        >
-          {isDarkMode ? <Sun size={24} /> : <Moon size={24} />}
-          <span className="text-[10px] font-bold uppercase tracking-tighter">Theme</span>
-        </button>
-      </nav>
-    </div>
+    <h1
+      className={`text-xl font-black uppercase tracking-tighter ${
+        isDarkMode ? 'text-white' : 'text-gray-900'
+      }`}
+    >
+      {children}
+    </h1>
   );
 }
+
+/**
+ * Shown instead of the app when the Firebase env vars are absent. Rendered
+ * outside AppContent, which is why it cannot read the dark-mode preference.
+ */
+function ConfigNotice() {
+  return (
+    <CenteredPane isDarkMode={false}>
+      <PaneTitle isDarkMode={false}>Firebase is not configured</PaneTitle>
+      <p className="text-sm text-gray-600">
+        LifeTrack keeps every account, pairing and shared board in Firebase, so it cannot
+        run without credentials. Copy <code>.env.example</code> to <code>.env.local</code>{' '}
+        and fill in your project values.
+      </p>
+      {missingFirebaseVars.length > 0 && (
+        <ul className="text-xs font-mono bg-white border border-gray-200 rounded-xl p-3 space-y-1 text-left">
+          {missingFirebaseVars.map((name) => (
+            <li key={name}>{name}</li>
+          ))}
+        </ul>
+      )}
+    </CenteredPane>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// App
+// ---------------------------------------------------------------------------
 
 export default function App() {
   return (
     <ErrorBoundary>
-      <AppContent />
+      {isFirebaseConfigured ? <AppContent /> : <ConfigNotice />}
     </ErrorBoundary>
+  );
+}
+
+function AppContent() {
+  const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('darkMode') ?? 'false');
+    } catch {
+      return false;
+    }
+  });
+
+  const [authUser, setAuthUser] = useState<FirebaseUser | null>(null);
+  const [authReady, setAuthReady] = useState(false);
+  // Tagged with the uid it belongs to, so a profile never leaks across a
+  // sign-out and a repeated auth event cannot strand the loading state.
+  const [profileState, setProfileState] = useState<{
+    uid: string | null;
+    profile: UserProfile | null;
+    failed: boolean;
+  }>({ uid: null, profile: null, failed: false });
+  // Bumped to re-subscribe after a failed profile read.
+  const [profileAttempt, setProfileAttempt] = useState(0);
+  const [partner, setPartner] = useState<UserProfile | null>(null);
+
+  const [myTracker, setMyTracker] = useState<TrackerData>(emptyTracker);
+  const [partnerTracker, setPartnerTracker] = useState<TrackerData>(emptyTracker);
+  const [activities, setActivities] = useState<Activity[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [incoming, setIncoming] = useState<ConnectionRequest[]>([]);
+  const [outgoing, setOutgoing] = useState<ConnectionRequest[]>([]);
+
+  const [activePage, setActivePage] = useState<Page>('dashboard');
+  const [highlightDate, setHighlightDate] = useState<string | null>(null);
+
+  useEffect(() => {
+    localStorage.setItem('darkMode', JSON.stringify(isDarkMode));
+    document.documentElement.classList.toggle('dark', isDarkMode);
+  }, [isDarkMode]);
+
+  // --- Auth -----------------------------------------------------------------
+
+  useEffect(
+    () =>
+      onAuthStateChanged(auth, (user) => {
+        setAuthUser(user);
+        setAuthReady(true);
+      }),
+    [],
+  );
+
+  const authUid = authUser?.uid ?? null;
+
+  // --- My profile -----------------------------------------------------------
+
+  useEffect(() => {
+    if (!authUid) {
+      setProfileState({ uid: null, profile: null, failed: false });
+      return;
+    }
+    return onSnapshot(
+      userDoc(authUid),
+      (snapshot) =>
+        setProfileState({
+          uid: authUid,
+          profile: snapshot.exists() ? normalizeProfile(authUid, snapshot.data()) : null,
+          failed: false,
+        }),
+      (error) => {
+        logFirestoreError(error, OperationType.GET, `users/${authUid}`);
+        // Deliberately NOT treated as "no account yet": sending someone whose
+        // profile merely failed to load into setup would have them rewrite a
+        // document they cannot see.
+        setProfileState({ uid: authUid, profile: null, failed: true });
+      },
+    );
+  }, [authUid, profileAttempt]);
+
+  // Only trust the profile once it has arrived for the account now signed in.
+  const profileReady = profileState.uid === authUid;
+  const profile = profileReady ? profileState.profile : null;
+
+  const uid = profile?.uid ?? null;
+  const partnerId = profile?.partnerId ?? null;
+  const pairId = profile?.pairId ?? null;
+
+  // --- Partner profile ------------------------------------------------------
+
+  useEffect(() => {
+    if (!partnerId) {
+      setPartner(null);
+      return;
+    }
+    return onSnapshot(
+      userDoc(partnerId),
+      (snapshot) =>
+        setPartner(snapshot.exists() ? normalizeProfile(partnerId, snapshot.data()) : null),
+      (error) => logFirestoreError(error, OperationType.GET, `users/${partnerId}`),
+    );
+  }, [partnerId]);
+
+  // --- Trackers -------------------------------------------------------------
+
+  useEffect(() => {
+    if (!uid) return;
+    return onSnapshot(
+      trackerDoc(uid),
+      (snapshot) => {
+        if (snapshot.exists()) {
+          setMyTracker(normalizeTracker(snapshot.data()));
+        } else {
+          const fresh = emptyTracker();
+          setMyTracker(fresh);
+          saveTracker(uid, fresh).catch((error) =>
+            logFirestoreError(error, OperationType.WRITE, `trackers/${uid}`),
+          );
+        }
+      },
+      (error) => logFirestoreError(error, OperationType.GET, `trackers/${uid}`),
+    );
+  }, [uid]);
+
+  useEffect(() => {
+    if (!partnerId) {
+      setPartnerTracker(emptyTracker());
+      return;
+    }
+    return onSnapshot(
+      trackerDoc(partnerId),
+      (snapshot) =>
+        setPartnerTracker(snapshot.exists() ? normalizeTracker(snapshot.data()) : emptyTracker()),
+      (error) => logFirestoreError(error, OperationType.GET, `trackers/${partnerId}`),
+    );
+  }, [partnerId]);
+
+  // --- Shared pair data -----------------------------------------------------
+
+  useEffect(() => {
+    if (!pairId) {
+      setActivities([]);
+      return;
+    }
+    return onSnapshot(
+      activitiesCol(pairId),
+      (snapshot) =>
+        setActivities(
+          snapshot.docs
+            .map((d) => normalizeActivity(d.id, d.data()))
+            .filter((a): a is Activity => a !== null),
+        ),
+      (error) => logFirestoreError(error, OperationType.LIST, `pairs/${pairId}/activities`),
+    );
+  }, [pairId]);
+
+  useEffect(() => {
+    if (!pairId) {
+      setMessages([]);
+      return;
+    }
+    return onSnapshot(
+      query(messagesCol(pairId), orderBy('timestamp', 'asc')),
+      (snapshot) =>
+        setMessages(
+          snapshot.docs
+            .map((d) => normalizeMessage(d.id, d.data()))
+            .filter((m): m is ChatMessage => m !== null),
+        ),
+      (error) => logFirestoreError(error, OperationType.LIST, `pairs/${pairId}/messages`),
+    );
+  }, [pairId]);
+
+  // --- Connection requests (only while unpaired) ----------------------------
+
+  useEffect(() => {
+    if (!uid || partnerId) {
+      setIncoming([]);
+      setOutgoing([]);
+      return;
+    }
+    const unsubIncoming = onSnapshot(
+      query(requestsCol(), where('toUid', '==', uid)),
+      (snapshot) =>
+        setIncoming(
+          snapshot.docs
+            .map((d) => normalizeRequest(d.id, d.data()))
+            .filter((r): r is ConnectionRequest => r !== null && r.status === 'pending'),
+        ),
+      (error) => logFirestoreError(error, OperationType.LIST, 'connectionRequests(incoming)'),
+    );
+    const unsubOutgoing = onSnapshot(
+      query(requestsCol(), where('fromUid', '==', uid)),
+      (snapshot) =>
+        setOutgoing(
+          snapshot.docs
+            .map((d) => normalizeRequest(d.id, d.data()))
+            .filter((r): r is ConnectionRequest => r !== null && r.status === 'pending'),
+        ),
+      (error) => logFirestoreError(error, OperationType.LIST, 'connectionRequests(outgoing)'),
+    );
+    return () => {
+      unsubIncoming();
+      unsubOutgoing();
+    };
+  }, [uid, partnerId]);
+
+  // --- Weekly reset (own tracker only) --------------------------------------
+
+  const trackerRef = useRef(myTracker);
+  trackerRef.current = myTracker;
+
+  useEffect(() => {
+    if (!uid) return;
+
+    const check = () => {
+      const current = trackerRef.current;
+      if (!needsWeeklyReset(current.lastResetDate, new Date())) return;
+      const reset = resetTracker(current);
+      setMyTracker(reset);
+      saveTracker(uid, reset).catch((error) =>
+        logFirestoreError(error, OperationType.WRITE, `trackers/${uid}`),
+      );
+    };
+
+    check();
+    const interval = window.setInterval(check, 1000 * 60 * 30);
+    return () => window.clearInterval(interval);
+  }, [uid, myTracker.lastResetDate]);
+
+  // --- Actions --------------------------------------------------------------
+
+  const handleSignOut = useCallback(() => {
+    signOut(auth).catch((error) => console.error('Sign out failed', error));
+  }, []);
+
+  const updateMyTracker = useCallback(
+    (data: TrackerData) => {
+      if (!uid) return;
+      setMyTracker(data); // optimistic; the snapshot confirms it
+      saveTracker(uid, data).catch((error) =>
+        logFirestoreError(error, OperationType.WRITE, `trackers/${uid}`),
+      );
+    },
+    [uid],
+  );
+
+  const handleAddActivity = useCallback(
+    (activity: { name: string; time: string; date: string; ownerId: string }) => {
+      if (!pairId) return;
+      addActivity(pairId, activity).catch((error) =>
+        logFirestoreError(error, OperationType.CREATE, `pairs/${pairId}/activities`),
+      );
+    },
+    [pairId],
+  );
+
+  const handleDeleteActivity = useCallback(
+    (id: string) => {
+      if (!pairId) return;
+      deleteActivity(pairId, id).catch((error) =>
+        logFirestoreError(error, OperationType.DELETE, `pairs/${pairId}/activities/${id}`),
+      );
+    },
+    [pairId],
+  );
+
+  const handleSendMessage = useCallback(
+    (text: string) => {
+      if (!pairId || !uid || !partnerId) return;
+      sendMessage(pairId, uid, partnerId, text).catch((error) =>
+        logFirestoreError(error, OperationType.CREATE, `pairs/${pairId}/messages`),
+      );
+    },
+    [pairId, uid, partnerId],
+  );
+
+  const handleDeleteMessage = useCallback(
+    (id: string) => {
+      if (!pairId) return;
+      deleteMessage(pairId, id).catch((error) =>
+        logFirestoreError(error, OperationType.DELETE, `pairs/${pairId}/messages/${id}`),
+      );
+    },
+    [pairId],
+  );
+
+  const dismissMessageFlag = useCallback(() => {
+    if (!uid) return;
+    clearMessageFlag(uid).catch((error) =>
+      logFirestoreError(error, OperationType.UPDATE, `users/${uid}`),
+    );
+  }, [uid]);
+
+  const openActivityFor = useCallback((date: string) => {
+    setHighlightDate(date);
+    setActivePage('activities');
+  }, []);
+
+  // A new pairing always starts on the dashboard, never on whatever page was
+  // open when the previous connection ended.
+  useEffect(() => setActivePage('dashboard'), [pairId]);
+
+  // Opening the chat clears the unread badge.
+  useEffect(() => {
+    if (activePage === 'chat' && profile?.hasNewMessage) dismissMessageFlag();
+  }, [activePage, profile?.hasNewMessage, dismissMessageFlag]);
+
+  const members = useMemo(
+    () => (profile && partner ? [profile, partner] : []),
+    [profile, partner],
+  );
+
+  // --- Gating ---------------------------------------------------------------
+
+  if (!authReady || (authUser && !profileReady)) {
+    return (
+      <Shell isDarkMode={isDarkMode}>
+        <CenteredPane isDarkMode={isDarkMode}>
+          <Spinner size={28} className={mutedText(isDarkMode)} />
+        </CenteredPane>
+      </Shell>
+    );
+  }
+
+  if (!authUser) {
+    return (
+      <Shell isDarkMode={isDarkMode}>
+        <AuthScreen isDarkMode={isDarkMode} />
+      </Shell>
+    );
+  }
+
+  // A profile that could not be READ is a different situation from one that
+  // does not exist yet, and must not be routed into setup.
+  if (profileState.failed) {
+    return (
+      <Shell isDarkMode={isDarkMode}>
+        <CenteredPane isDarkMode={isDarkMode}>
+          <PaneTitle isDarkMode={isDarkMode}>Could not load your profile</PaneTitle>
+          <p className={`text-sm ${mutedText(isDarkMode)}`}>
+            Your account is fine, we just could not reach it. Check your connection and
+            try again.
+          </p>
+          <div className="flex gap-3">
+            <button
+              onClick={() => setProfileAttempt((n) => n + 1)}
+              className="px-5 py-3 rounded-xl bg-violet-500 text-white font-bold text-xs uppercase tracking-widest shadow-lg transition-transform active:scale-95"
+            >
+              Try again
+            </button>
+            <button
+              onClick={handleSignOut}
+              className={`px-5 py-3 rounded-xl font-bold text-xs uppercase tracking-widest transition-colors ${
+                isDarkMode
+                  ? 'bg-gray-800 text-gray-400 hover:text-white'
+                  : 'bg-white border border-gray-200 text-gray-500 hover:text-gray-900'
+              }`}
+            >
+              Sign out
+            </button>
+          </div>
+        </CenteredPane>
+      </Shell>
+    );
+  }
+
+  if (!profile) {
+    return (
+      <Shell isDarkMode={isDarkMode}>
+        <Onboarding
+          user={authUser}
+          isDarkMode={isDarkMode}
+          onDone={(created) =>
+            setProfileState({ uid: created.uid, profile: created, failed: false })
+          }
+          onSignOut={handleSignOut}
+        />
+      </Shell>
+    );
+  }
+
+  if (!profile.partnerId || !profile.pairId) {
+    return (
+      <Shell isDarkMode={isDarkMode}>
+        <PairSetup
+          profile={profile}
+          incoming={incoming}
+          outgoing={outgoing}
+          isDarkMode={isDarkMode}
+          onToggleDarkMode={() => setIsDarkMode((v) => !v)}
+          onSignOut={handleSignOut}
+        />
+      </Shell>
+    );
+  }
+
+  if (!partner) {
+    return (
+      <Shell isDarkMode={isDarkMode}>
+        <CenteredPane isDarkMode={isDarkMode}>
+          <Spinner size={28} className={mutedText(isDarkMode)} />
+          <p className={`text-xs font-black uppercase tracking-widest ${mutedText(isDarkMode)}`}>
+            Loading your partner
+          </p>
+        </CenteredPane>
+      </Shell>
+    );
+  }
+
+  // --- Paired experience ----------------------------------------------------
+
+  const myTheme = getTheme(profile.themeColor);
+  const partnerTheme = getTheme(partner.themeColor);
+
+  const navItems: { page: Page; label: string; icon: ReactNode; color: string }[] = [
+    { page: 'dashboard', label: 'Home', icon: <LayoutDashboard size={18} />, color: myTheme.primary },
+    { page: 'me', label: 'Me', icon: <User size={18} />, color: myTheme.primary },
+    {
+      page: 'partner',
+      label: partner.displayName.split(' ')[0],
+      icon: <Users size={18} />,
+      color: partnerTheme.primary,
+    },
+    { page: 'activities', label: 'Events', icon: <Calendar size={18} />, color: myTheme.primary },
+    { page: 'chat', label: 'Chat', icon: <MessageSquare size={18} />, color: myTheme.primary },
+    { page: 'settings', label: 'Settings', icon: <SettingsIcon size={18} />, color: myTheme.primary },
+  ];
+
+  const pageContent: Record<Page, ReactNode> = {
+    dashboard: (
+      <Dashboard
+        me={profile}
+        partner={partner}
+        myTracker={myTracker}
+        partnerTracker={partnerTracker}
+        activities={activities}
+        isDarkMode={isDarkMode}
+        onDismissMessage={dismissMessageFlag}
+      />
+    ),
+    me: (
+      <TaskTracker
+        profile={profile}
+        data={myTracker}
+        onUpdate={updateMyTracker}
+        isDarkMode={isDarkMode}
+        activities={activities}
+        onActivityClick={openActivityFor}
+      />
+    ),
+    partner: (
+      <TaskTracker
+        profile={partner}
+        data={partnerTracker}
+        onUpdate={() => {}}
+        isDarkMode={isDarkMode}
+        activities={activities}
+        onActivityClick={openActivityFor}
+        readOnly
+      />
+    ),
+    activities: (
+      <Activities
+        activities={activities}
+        members={members}
+        currentUid={profile.uid}
+        onAdd={handleAddActivity}
+        onDelete={handleDeleteActivity}
+        isDarkMode={isDarkMode}
+        highlightDate={highlightDate}
+        onClearHighlight={() => setHighlightDate(null)}
+      />
+    ),
+    chat: (
+      <ChatDesk
+        messages={messages}
+        me={profile}
+        partner={partner}
+        onSend={handleSendMessage}
+        onDelete={handleDeleteMessage}
+        isDarkMode={isDarkMode}
+      />
+    ),
+    settings: (
+      <SettingsPanel
+        profile={profile}
+        partner={partner}
+        isDarkMode={isDarkMode}
+        onSignOut={handleSignOut}
+      />
+    ),
+  };
+
+  return (
+    <Shell isDarkMode={isDarkMode}>
+      <div className="h-full w-full flex flex-col overflow-hidden">
+        {/* Desktop navigation */}
+        <nav
+          className={`hidden md:flex px-6 py-3 items-center justify-between shadow-sm z-50 ${
+            isDarkMode ? 'bg-gray-800 border-b border-gray-700' : 'bg-white border-b border-gray-200'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            <div
+              className="p-2 rounded-lg"
+              style={{ backgroundColor: myTheme.primary }}
+            >
+              <Heart size={18} color={readableOn(myTheme.primary)} className="fill-current" />
+            </div>
+            <span className={`font-bold text-lg tracking-tight ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
+              LifeTrack
+            </span>
+          </div>
+
+          <div className={`flex items-center gap-1 p-1 rounded-xl ${isDarkMode ? 'bg-gray-900' : 'bg-gray-100'}`}>
+            {navItems.map((item) => {
+              const active = activePage === item.page;
+              return (
+                <button
+                  key={item.page}
+                  onClick={() => setActivePage(item.page)}
+                  style={active ? { color: item.color } : undefined}
+                  className={`relative flex items-center gap-2 px-3 lg:px-4 py-2 rounded-lg transition-all text-sm font-bold ${
+                    active
+                      ? isDarkMode
+                        ? 'bg-gray-800 shadow-sm'
+                        : 'bg-white shadow-sm'
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  {item.icon}
+                  <span className="hidden lg:inline max-w-[9ch] truncate">{item.label}</span>
+                  {item.page === 'chat' && profile.hasNewMessage && (
+                    <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-red-500" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setIsDarkMode((v) => !v)}
+              aria-label="Toggle dark mode"
+              className={`p-2 rounded-lg transition-colors ${
+                isDarkMode
+                  ? 'bg-gray-700 text-yellow-400 hover:bg-gray-600'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              {isDarkMode ? <Sun size={18} /> : <Moon size={18} />}
+            </button>
+            <button
+              onClick={handleSignOut}
+              aria-label="Sign out"
+              className={`p-2 rounded-lg transition-colors ${
+                isDarkMode
+                  ? 'bg-gray-700 text-gray-400 hover:text-red-400'
+                  : 'bg-gray-100 text-gray-600 hover:text-red-500'
+              }`}
+            >
+              <LogOut size={18} />
+            </button>
+            <div className="hidden xl:flex items-center gap-2">
+              <Avatar
+                name={profile.displayName}
+                colorId={profile.themeColor}
+                photoURL={profile.photoURL}
+                size={34}
+              />
+              <div className="text-right">
+                <p className={`text-xs font-bold ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>
+                  {profile.displayName}
+                </p>
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                  {format(new Date(), 'MMM d')}
+                </p>
+              </div>
+            </div>
+          </div>
+        </nav>
+
+        {/* Page content */}
+        <main className="flex-1 relative overflow-hidden">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={activePage}
+              initial={{ opacity: 0, scale: 0.98 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 1.02 }}
+              transition={{ duration: 0.18 }}
+              className="absolute inset-x-0 top-0 bottom-[68px] md:bottom-0"
+            >
+              {pageContent[activePage]}
+            </motion.div>
+          </AnimatePresence>
+        </main>
+
+        {/* Mobile navigation */}
+        <nav
+          className={`md:hidden fixed bottom-0 left-0 right-0 z-50 px-1 py-2 flex items-center justify-around shadow-[0_-4px_10px_rgba(0,0,0,0.05)] ${
+            isDarkMode ? 'bg-gray-800 border-t border-gray-700' : 'bg-white border-t border-gray-200'
+          }`}
+        >
+          {navItems.map((item) => {
+            const active = activePage === item.page;
+            return (
+              <button
+                key={item.page}
+                onClick={() => setActivePage(item.page)}
+                style={active ? { color: item.color } : undefined}
+                className={`relative flex flex-col items-center gap-0.5 px-1 py-1 min-w-0 flex-1 ${
+                  active ? '' : 'text-gray-400'
+                }`}
+              >
+                {item.icon}
+                <span className="text-[9px] font-bold uppercase tracking-tighter truncate max-w-full">
+                  {item.label}
+                </span>
+                {item.page === 'chat' && profile.hasNewMessage && (
+                  <span className="absolute top-0 right-1/4 w-2 h-2 rounded-full bg-red-500" />
+                )}
+              </button>
+            );
+          })}
+        </nav>
+      </div>
+    </Shell>
+  );
+}
+
+function Shell({ isDarkMode, children }: { isDarkMode: boolean; children: ReactNode }) {
+  return (
+    <div
+      className={`h-[100dvh] w-screen overflow-hidden transition-colors duration-300 ${
+        isDarkMode ? 'bg-gray-900' : 'bg-gray-50'
+      }`}
+    >
+      {children}
+    </div>
   );
 }

@@ -1,5 +1,5 @@
 {
-  "name": "Habit Tracker",
-  "description": "A shared life management tool featuring a period tracker and individual task planners for Grace and Tanga.",
+  "name": "LifeTrack",
+  "description": "A two-person accountability tracker: pair up with one partner to share habit dashboards, a calendar and a chat.",
   "requestFramePermissions": []
 }

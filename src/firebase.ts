@@ -1,17 +1,7 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
-
 import { initializeApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider } from 'firebase/auth';
-import { 
-  getFirestore, 
-  doc, 
-  getDocFromServer,
-} from 'firebase/firestore';
+import { getAuth, GoogleAuthProvider, Auth } from 'firebase/auth';
+import { getFirestore, Firestore } from 'firebase/firestore';
 
-// Firebase configuration from environment variables
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
@@ -21,31 +11,41 @@ const firebaseConfig = {
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
 };
 
-const firestoreDatabaseId = import.meta.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID;
+/** Only set when the project uses a named database instead of `(default)`. */
+const databaseId: string | undefined =
+  import.meta.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID || undefined;
 
-// Validate configuration
-const missingVars = Object.entries(firebaseConfig)
-  .filter(([_, value]) => !value)
-  .map(([key]) => `VITE_FIREBASE_${key.replace(/[A-Z]/g, letter => `_${letter}`).toUpperCase()}`);
+export const missingFirebaseVars = Object.entries({
+  VITE_FIREBASE_API_KEY: firebaseConfig.apiKey,
+  VITE_FIREBASE_AUTH_DOMAIN: firebaseConfig.authDomain,
+  VITE_FIREBASE_PROJECT_ID: firebaseConfig.projectId,
+  VITE_FIREBASE_APP_ID: firebaseConfig.appId,
+})
+  .filter(([, value]) => !value)
+  .map(([key]) => key);
 
-if (missingVars.length > 0 && import.meta.env.PROD) {
-  console.error('Missing Firebase environment variables:', missingVars);
+export const isFirebaseConfigured = missingFirebaseVars.length === 0;
+
+// Initialising with a half-empty config produces a confusing failure at every
+// later call site instead of one clear message, so it is skipped entirely and
+// App renders a setup notice instead.
+let authInstance: Auth | null = null;
+let dbInstance: Firestore | null = null;
+
+if (isFirebaseConfigured) {
+  const app = initializeApp(firebaseConfig);
+  authInstance = getAuth(app);
+  dbInstance = databaseId ? getFirestore(app, databaseId) : getFirestore(app);
+} else if (import.meta.env.PROD) {
+  console.error('Missing Firebase environment variables:', missingFirebaseVars);
 }
 
-export const isFirebaseConfigured = !!(
-  firebaseConfig.apiKey &&
-  firebaseConfig.projectId &&
-  !firebaseConfig.apiKey.includes('YOUR_API_KEY') &&
-  !firebaseConfig.apiKey.includes('placeholder')
-);
-
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-export const auth = getAuth(app);
-export const db = getFirestore(app, firestoreDatabaseId);
+// Safe to assert: everything that touches these renders only under
+// `isFirebaseConfigured`.
+export const auth = authInstance as Auth;
+export const db = dbInstance as Firestore;
 export const googleProvider = new GoogleAuthProvider();
 
-// Error Handling Helper
 export enum OperationType {
   CREATE = 'create',
   UPDATE = 'update',
@@ -55,46 +55,59 @@ export enum OperationType {
   WRITE = 'write',
 }
 
-export interface FirestoreErrorInfo {
-  error: string;
-  operationType: OperationType;
-  path: string | null;
-  authInfo: {
-    userId: string | undefined;
-    email: string | null | undefined;
-    emailVerified: boolean | undefined;
-    isAnonymous: boolean | undefined;
-    tenantId: string | null | undefined;
-    providerInfo: {
-      providerId: string;
-      displayName: string | null;
-      email: string | null;
-      photoUrl: string | null;
-    }[];
+/**
+ * Logs a Firestore failure with auth context.
+ *
+ * Deliberately does not rethrow. Callers are `onSnapshot` error handlers and
+ * `.catch()` on fire-and-forget writes, where throwing only turns a logged
+ * problem into an unhandled rejection.
+ */
+export function logFirestoreError(
+  error: unknown,
+  operationType: OperationType,
+  path: string | null,
+) {
+  const user = authInstance?.currentUser;
+  console.error('Firestore error', {
+    error: error instanceof Error ? error.message : String(error),
+    operationType,
+    path,
+    auth: user ? { uid: user.uid, email: user.email } : null,
+  });
+}
+
+/** Maps Firebase auth error codes to something worth showing a user. */
+export function friendlyAuthError(error: unknown): string {
+  const code =
+    typeof error === 'object' && error !== null && 'code' in error
+      ? String((error as { code: unknown }).code)
+      : '';
+
+  switch (code) {
+    case 'auth/invalid-email':
+      return 'That email address does not look right.';
+    case 'auth/missing-password':
+      return 'Please enter a password.';
+    case 'auth/weak-password':
+      return 'Password must be at least 6 characters.';
+    case 'auth/email-already-in-use':
+      return 'An account already exists for that email. Try signing in instead.';
+    case 'auth/invalid-credential':
+    case 'auth/wrong-password':
+    case 'auth/user-not-found':
+      return 'Incorrect email or password.';
+    case 'auth/too-many-requests':
+      return 'Too many attempts. Please wait a moment and try again.';
+    case 'auth/popup-closed-by-user':
+    case 'auth/cancelled-popup-request':
+      return 'Sign-in window was closed before finishing.';
+    case 'auth/popup-blocked':
+      return 'Your browser blocked the sign-in popup. Allow popups and retry.';
+    case 'auth/operation-not-allowed':
+      return 'That sign-in method is not enabled for this Firebase project.';
+    case 'auth/network-request-failed':
+      return 'Network problem. Check your connection and try again.';
+    default:
+      return error instanceof Error ? error.message : 'Something went wrong.';
   }
 }
-
-export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
-  const errInfo: FirestoreErrorInfo = {
-    error: error instanceof Error ? error.message : String(error),
-    authInfo: {
-      userId: auth.currentUser?.uid,
-      email: auth.currentUser?.email,
-      emailVerified: auth.currentUser?.emailVerified,
-      isAnonymous: auth.currentUser?.isAnonymous,
-      tenantId: auth.currentUser?.tenantId,
-      providerInfo: auth.currentUser?.providerData.map(provider => ({
-        providerId: provider.providerId,
-        displayName: provider.displayName,
-        email: provider.email,
-        photoUrl: provider.photoURL
-      })) || []
-    },
-    operationType,
-    path
-  };
-  console.error('Firestore Error: ', JSON.stringify(errInfo));
-  throw new Error(JSON.stringify(errInfo));
-}
-
-

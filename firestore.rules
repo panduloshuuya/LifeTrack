@@ -1,66 +1,244 @@
 rules_version = '2';
+
+// ===========================================================================
+// LifeTrack data model
+// ===========================================================================
+//
+//   users/{uid}                      public profile + pairing state
+//   trackers/{uid}                   private habits & weekly plan (partner may read)
+//   pairs/{pairId}                   { id, members: [uidA, uidB], createdAt }
+//   pairs/{pairId}/activities/{id}   shared calendar
+//   pairs/{pairId}/messages/{id}     shared ChatDesk
+//   connectionRequests/{from_to}     pending pairing invitation
+//
+// Every user belongs to at most one pair. Pairing is a two-sided handshake:
+// A creates a request, B accepts it, and only then may either side write the
+// `partnerId` / `pairId` fields on the other's profile.
+// ===========================================================================
+
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    // ===============================================================
-    // Assumed Data Model
-    // ===============================================================
-    //
-    // Collection: trackers
-    //   - grace: UserData (habits, weeklySchedule, lastResetDate)
-    //   - tanga: UserData (habits, weeklySchedule, lastResetDate)
-    //   - period: PeriodData (startDate, endDate, cycleLength)
-    //
-    // ===============================================================
 
-    // ===============================================================
-    // Helper Functions
-    // ===============================================================
-    
-    function isAuthenticated() {
+    // ---------------------------------------------------------------------
+    // Helpers
+    // ---------------------------------------------------------------------
+
+    function signedIn() {
       return request.auth != null;
     }
 
-    function isAdmin() {
-      return isAuthenticated() &&
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
-          (request.auth.token.email == "bygreys.na@gmail.com" && request.auth.token.email_verified == true));
+    function me() {
+      return request.auth.uid;
     }
 
-    function hasOnlyAllowedFields(fields) {
-      return request.resource.data.keys().hasOnly(fields);
+    function userPath(uid) {
+      return /databases/$(database)/documents/users/$(uid);
     }
 
-    function isValidUserData(data) {
-      return hasOnlyAllowedFields(['habits', 'weeklySchedule', 'lastResetDate']) &&
-             data.habits is list &&
-             data.weeklySchedule is map &&
-             data.lastResetDate is string;
+    function profileOf(uid) {
+      return get(userPath(uid)).data;
     }
 
-    function isValidPeriodData(data) {
-      return hasOnlyAllowedFields(['startDate', 'endDate', 'cycleLength']) &&
-             (data.startDate == null || data.startDate is string) &&
-             (data.endDate == null || data.endDate is string) &&
-             data.cycleLength is number;
+    function partnerOfMe() {
+      return exists(userPath(me())) ? profileOf(me()).partnerId : null;
     }
 
-    // ===============================================================
-    // Rules
-    // ===============================================================
-
-    match /trackers/{trackerId} {
-      allow read, write: if true;
+    function pairMembers(pairId) {
+      return get(/databases/$(database)/documents/pairs/$(pairId)).data.members;
     }
 
-    match /users/{userId} {
-      allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
-      allow write: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+    function inPair(pairId) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/pairs/$(pairId))
+        && me() in pairMembers(pairId);
     }
 
-    // Default deny
-    match /{path=**} {
+    function changed() {
+      return request.resource.data.diff(resource.data).affectedKeys();
+    }
+
+    // The two halves of a pair may never share a theme colour.
+    function colourFreeFor(partnerId, colour) {
+      return partnerId == null
+        || !exists(userPath(partnerId))
+        || profileOf(partnerId).themeColor != colour;
+    }
+
+    // A pending invitation sent by `fromUid` to the caller.
+    function hasPendingRequestFrom(fromUid) {
+      return exists(/databases/$(database)/documents/connectionRequests/$(fromUid + '_' + me()))
+        && get(/databases/$(database)/documents/connectionRequests/$(fromUid + '_' + me())).data.status == 'pending';
+    }
+
+    // ---------------------------------------------------------------------
+    // users
+    // ---------------------------------------------------------------------
+
+    match /users/{uid} {
+      // Profiles are searchable by any signed-in user: finding a partner by
+      // name or email is the core of the pairing flow.
+      allow get, list: if signedIn();
+
+      allow create: if signedIn()
+        && me() == uid
+        && request.resource.data.uid == uid
+        && request.resource.data.partnerId == null
+        && request.resource.data.pairId == null
+        && request.resource.data.displayName is string
+        && request.resource.data.displayName.size() >= 2;
+
+      // --- Writes to your own profile ---
+      // Editing your name/colour, clearing a notification, accepting a request
+      // (only when someone actually sent you one), or disconnecting.
+      allow update: if signedIn() && me() == uid && (
+        (
+          changed().hasOnly(['displayName', 'displayNameLower', 'themeColor', 'photoURL'])
+          && colourFreeFor(resource.data.partnerId, request.resource.data.themeColor)
+        )
+        || changed().hasOnly(['hasNewMessage'])
+        || (
+          changed().hasOnly(['partnerId', 'pairId', 'themeColor'])
+          && resource.data.partnerId == null
+          && request.resource.data.partnerId is string
+          && request.resource.data.pairId is string
+          && hasPendingRequestFrom(request.resource.data.partnerId)
+          && colourFreeFor(request.resource.data.partnerId, request.resource.data.themeColor)
+        )
+        || (
+          changed().hasOnly(['partnerId', 'pairId'])
+          && request.resource.data.partnerId == null
+          && request.resource.data.pairId == null
+        )
+        // Re-running setup must never be a dead end. Onboarding rewrites the
+        // whole document, which changes `createdAt` and so matches none of the
+        // narrow branches above; without this a user whose profile exists but
+        // failed to load could never create or repair it, and would therefore
+        // never become searchable. Pairing state stays immutable here.
+        || (
+          request.resource.data.uid == uid
+          && request.resource.data.partnerId == resource.data.partnerId
+          && request.resource.data.pairId == resource.data.pairId
+          && request.resource.data.displayName is string
+          && request.resource.data.displayName.size() >= 2
+          && colourFreeFor(resource.data.partnerId, request.resource.data.themeColor)
+        )
+      );
+
+      // --- Writes to the other person's profile ---
+      allow update: if signedIn() && me() != uid && (
+        // Linking: only after they invited you, and only onto yourself.
+        (
+          changed().hasOnly(['partnerId', 'pairId'])
+          && resource.data.partnerId == null
+          && request.resource.data.partnerId == me()
+          && request.resource.data.pairId is string
+          && hasPendingRequestFrom(uid)
+        )
+        // Unlinking: either half of a pair may end it.
+        || (
+          changed().hasOnly(['partnerId', 'pairId'])
+          && resource.data.partnerId == me()
+          && request.resource.data.partnerId == null
+          && request.resource.data.pairId == null
+        )
+        // Raising your partner's "new message" flag.
+        || (
+          changed().hasOnly(['hasNewMessage'])
+          && resource.data.partnerId == me()
+          && request.resource.data.hasNewMessage == true
+        )
+      );
+
+      // You may remove your own profile, but not while someone is depending on
+      // you: disconnect first so your partner is not left pointing at nothing.
+      allow delete: if signedIn() && me() == uid && resource.data.partnerId == null;
+    }
+
+    // ---------------------------------------------------------------------
+    // trackers - one document per user, readable by their partner
+    // ---------------------------------------------------------------------
+
+    match /trackers/{uid} {
+      allow read: if signedIn() && (me() == uid || partnerOfMe() == uid);
+      allow create, update: if signedIn() && me() == uid
+        && request.resource.data.habits is list
+        && request.resource.data.weeklySchedule is map
+        && request.resource.data.lastResetDate is string;
+      allow delete: if signedIn() && me() == uid;
+    }
+
+    // ---------------------------------------------------------------------
+    // pairs and their shared subcollections
+    // ---------------------------------------------------------------------
+
+    match /pairs/{pairId} {
+      allow read: if signedIn() && me() in resource.data.members;
+
+      allow create: if signedIn()
+        && request.resource.data.members is list
+        && request.resource.data.members.size() == 2
+        && me() in request.resource.data.members
+        && request.resource.data.id == pairId;
+
+      // Membership is fixed for the life of a pair; changing partners means a
+      // new pair document.
+      allow update: if false;
+
+      allow delete: if signedIn() && me() in resource.data.members;
+
+      match /activities/{activityId} {
+        allow read, delete: if inPair(pairId);
+        allow create, update: if inPair(pairId)
+          && request.resource.data.name is string
+          && request.resource.data.date is string
+          && request.resource.data.ownerId in pairMembers(pairId);
+      }
+
+      match /messages/{messageId} {
+        allow read: if inPair(pairId);
+        // You may only speak as yourself.
+        allow create: if inPair(pairId)
+          && request.resource.data.senderId == me()
+          && request.resource.data.text is string
+          && request.resource.data.text.size() > 0;
+        // Messages are never edited, only removed.
+        allow update: if false;
+        // Either member may delete: the UI only offers it for your own
+        // messages, but disconnecting has to clear the whole thread.
+        allow delete: if inPair(pairId);
+      }
+    }
+
+    // ---------------------------------------------------------------------
+    // connectionRequests
+    // ---------------------------------------------------------------------
+
+    match /connectionRequests/{requestId} {
+      allow get, list: if signedIn()
+        && (me() == resource.data.fromUid || me() == resource.data.toUid);
+
+      allow create: if signedIn()
+        && me() == request.resource.data.fromUid
+        && request.resource.data.fromUid != request.resource.data.toUid
+        && requestId == request.resource.data.fromUid + '_' + request.resource.data.toUid
+        && request.resource.data.status == 'pending';
+
+      // Only the recipient marks a request accepted.
+      allow update: if signedIn()
+        && me() == resource.data.toUid
+        && changed().hasOnly(['status'])
+        && request.resource.data.status == 'accepted';
+
+      // Sender cancels, recipient declines, both clean up after pairing.
+      allow delete: if signedIn()
+        && (me() == resource.data.fromUid || me() == resource.data.toUid);
+    }
+
+    // ---------------------------------------------------------------------
+    // Everything else is denied.
+    // ---------------------------------------------------------------------
+
+    match /{document=**} {
       allow read, write: if false;
     }
   }

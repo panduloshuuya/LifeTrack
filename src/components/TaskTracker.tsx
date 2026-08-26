@@ -1,331 +1,429 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
+// One person's planner: weekly habit grid, plus classes and tasks per day.
+//
+// Used for both members of the pair. The partner's board renders with
+// `readOnly`, which hides every control rather than just disabling it, since
+// the security rules would reject those writes anyway.
 
-import React, { useState, useMemo, useEffect } from 'react';
-import { 
-  format, 
-  startOfWeek, 
-  addDays, 
-  isToday, 
-  startOfMonth, 
-  endOfMonth, 
+import React, { useMemo, useState } from 'react';
+import {
+  addMonths,
+  endOfMonth,
   eachDayOfInterval,
+  format,
   isSameDay,
+  isToday,
+  parseISO,
+  startOfMonth,
   startOfToday,
-  parseISO
+  subMonths,
 } from 'date-fns';
-import { 
-  CheckSquare, 
-  Square, 
-  Plus, 
-  Trash2, 
-  Calendar as CalendarIcon, 
-  LayoutGrid,
+import {
+  Check,
+  CheckSquare,
   ChevronLeft,
   ChevronRight,
+  Eye,
   Pencil,
-  Bell,
-  Check
+  Plus,
+  Square,
+  Trash2,
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
-import { UserData, DayOfWeek, Habit, Task, ClassEvent, Activity } from '../types';
+import { AnimatePresence, motion } from 'motion/react';
+import { getTheme, readableOn, themeText, withAlpha } from '../theme';
+import {
+  Activity,
+  ClassEvent,
+  DayData,
+  DayOfWeek,
+  DAYS,
+  Habit,
+  Task,
+  TrackerData,
+  UserProfile,
+} from '../types';
+import { newId } from '../services/db';
+import { mutedText } from './ui';
+
+const DAY_LABELS: Record<DayOfWeek, string> = {
+  Mon: 'Monday',
+  Tue: 'Tuesday',
+  Wed: 'Wednesday',
+  Thu: 'Thursday',
+  Fri: 'Friday',
+  Sat: 'Saturday',
+  Sun: 'Sunday',
+};
 
 interface TaskTrackerProps {
-  name: string;
-  colorScheme: 'pink' | 'blue';
-  data: UserData;
-  onUpdate: (newData: UserData) => void;
+  profile: UserProfile;
+  data: TrackerData;
+  onUpdate: (data: TrackerData) => void;
   isDarkMode: boolean;
   activities: Activity[];
   onActivityClick: (date: string) => void;
+  /** Partner boards are visible but not editable. */
+  readOnly?: boolean;
 }
 
-const DAYS: DayOfWeek[] = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+interface ModalState {
+  isOpen: boolean;
+  title: string;
+  value: string;
+  onConfirm: (value: string) => void;
+}
 
-export default function TaskTracker({ 
-  name, 
-  colorScheme, 
-  data, 
-  onUpdate, 
+/** Deep-ish clone of one day so updates never mutate the object held in state. */
+function withDay(
+  schedule: Record<DayOfWeek, DayData>,
+  day: DayOfWeek,
+  patch: Partial<DayData>,
+): Record<DayOfWeek, DayData> {
+  return { ...schedule, [day]: { ...schedule[day], ...patch } };
+}
+
+export default function TaskTracker({
+  profile,
+  data,
+  onUpdate,
   isDarkMode,
   activities,
-  onActivityClick
+  onActivityClick,
+  readOnly = false,
 }: TaskTrackerProps) {
-  const [currentMonth, setCurrentMonth] = useState(new Date());
-  const [selectedDay, setSelectedDay] = useState<DayOfWeek>(format(startOfToday(), 'EEE') as DayOfWeek);
-  const [modal, setModal] = useState<{
-    isOpen: boolean;
-    title: string;
-    value: string;
-    onConfirm: (val: string) => void;
-  }>({
+  const [currentMonth, setCurrentMonth] = useState(() => startOfToday());
+  const [selectedDay, setSelectedDay] = useState<DayOfWeek>(
+    () => format(startOfToday(), 'EEE') as DayOfWeek,
+  );
+  const [modal, setModal] = useState<ModalState>({
     isOpen: false,
     title: '',
     value: '',
     onConfirm: () => {},
   });
 
-  const today = startOfToday();
+  const theme = getTheme(profile.themeColor);
+  const onPrimary = readableOn(theme.primary);
+  const accentText = themeText(theme, isDarkMode);
 
-  const colors = {
-    primary: colorScheme === 'pink' ? 'bg-pink-300' : 'bg-violet-400',
-    secondary: colorScheme === 'pink' 
-      ? (isDarkMode ? 'bg-pink-950/20' : 'bg-pink-50') 
-      : (isDarkMode ? 'bg-violet-900/20' : 'bg-violet-50'),
-    text: colorScheme === 'pink' ? 'text-pink-400' : 'text-violet-500',
-    border: colorScheme === 'pink' 
-      ? (isDarkMode ? 'border-pink-900/30' : 'border-pink-100') 
-      : (isDarkMode ? 'border-violet-900/40' : 'border-violet-200/50'),
-    hover: colorScheme === 'pink' 
-      ? (isDarkMode ? 'hover:bg-pink-900/20' : 'hover:bg-pink-100/40') 
-      : (isDarkMode ? 'hover:bg-violet-900/30' : 'hover:bg-violet-100/60'),
-    accent: colorScheme === 'pink' ? 'bg-pink-300' : 'bg-violet-400',
-  };
+  const calendarDays = useMemo(
+    () =>
+      eachDayOfInterval({
+        start: startOfMonth(currentMonth),
+        end: endOfMonth(currentMonth),
+      }),
+    [currentMonth],
+  );
 
-  const calendarDays = useMemo(() => {
-    const start = startOfMonth(currentMonth);
-    const end = endOfMonth(currentMonth);
-    return eachDayOfInterval({ start, end });
-  }, [currentMonth]);
-
-  const calculateWeeklyPercentage = () => {
+  const weeklyPercentage = () => {
     if (data.habits.length === 0) return 0;
-    let total = data.habits.length * 7;
+    const total = data.habits.length * DAYS.length;
     let completed = 0;
-    data.habits.forEach(habit => {
-      DAYS.forEach(day => {
+    data.habits.forEach((habit) => {
+      DAYS.forEach((day) => {
         if (habit.completed[day]) completed++;
       });
     });
     return Math.round((completed / total) * 100);
   };
 
-  const calculateDailyPercentage = (day: DayOfWeek) => {
-    const dayData = data.weeklySchedule[day];
-    const total = dayData.tasks.length;
-    const completed = dayData.tasks.filter(t => t.completed).length;
-    return total === 0 ? 0 : Math.round((completed / total) * 100);
+  const dailyPercentage = (day: DayOfWeek) => {
+    const tasks = data.weeklySchedule[day].tasks;
+    if (tasks.length === 0) return 0;
+    return Math.round((tasks.filter((t) => t.completed).length / tasks.length) * 100);
   };
 
-  const addHabit = () => {
-    setModal({
-      isOpen: true,
-      title: 'Add New Habit',
-      value: '',
-      onConfirm: (val) => {
-        if (!val.trim()) return;
-        const newHabit: Habit = {
-          id: crypto.randomUUID(),
-          name: val.trim(),
-          completed: { Sun: false, Mon: false, Tue: false, Wed: false, Thu: false, Fri: false, Sat: false }
-        };
-        onUpdate({ ...data, habits: [...data.habits, newHabit] });
-      }
-    });
+  const prompt = (title: string, value: string, onConfirm: (val: string) => void) => {
+    if (readOnly) return;
+    setModal({ isOpen: true, title, value, onConfirm });
   };
 
-  const editHabit = (habitId: string, currentName: string) => {
-    setModal({
-      isOpen: true,
-      title: 'Edit Habit',
-      value: currentName,
-      onConfirm: (val) => {
-        if (!val.trim() || val.trim() === currentName) return;
-        const newHabits = data.habits.map(h => 
-          h.id === habitId ? { ...h, name: val.trim() } : h
-        );
-        onUpdate({ ...data, habits: newHabits });
-      }
-    });
-  };
+  // --- Habits ---------------------------------------------------------------
 
-  const editClass = (day: DayOfWeek, classId: string, currentName: string) => {
-    setModal({
-      isOpen: true,
-      title: 'Edit Class/Event',
-      value: currentName,
-      onConfirm: (val) => {
-        if (!val.trim() || val.trim() === currentName) return;
-        const newSchedule = { ...data.weeklySchedule };
-        newSchedule[day].classes = newSchedule[day].classes.map(c => 
-          c.id === classId ? { ...c, name: val.trim() } : c
-        );
-        onUpdate({ ...data, weeklySchedule: newSchedule });
-      }
+  const addHabit = () =>
+    prompt('Add new habit', '', (value) => {
+      const name = value.trim();
+      if (!name) return;
+      const habit: Habit = {
+        id: newId(),
+        name,
+        completed: DAYS.reduce(
+          (acc, day) => ({ ...acc, [day]: false }),
+          {} as Habit['completed'],
+        ),
+      };
+      onUpdate({ ...data, habits: [...data.habits, habit] });
     });
-  };
 
-  const editTask = (day: DayOfWeek, taskId: string, currentName: string) => {
-    setModal({
-      isOpen: true,
-      title: 'Edit Task',
-      value: currentName,
-      onConfirm: (val) => {
-        if (!val.trim() || val.trim() === currentName) return;
-        const newSchedule = { ...data.weeklySchedule };
-        newSchedule[day].tasks = newSchedule[day].tasks.map(t => 
-          t.id === taskId ? { ...t, name: val.trim() } : t
-        );
-        onUpdate({ ...data, weeklySchedule: newSchedule });
-      }
+  const editHabit = (habitId: string, currentName: string) =>
+    prompt('Edit habit', currentName, (value) => {
+      const name = value.trim();
+      if (!name || name === currentName) return;
+      onUpdate({
+        ...data,
+        habits: data.habits.map((h) => (h.id === habitId ? { ...h, name } : h)),
+      });
     });
-  };
 
   const toggleHabit = (habitId: string, day: DayOfWeek) => {
-    const newHabits = data.habits.map(h => {
-      if (h.id === habitId) {
-        return { ...h, completed: { ...h.completed, [day]: !h.completed[day] } };
-      }
-      return h;
-    });
-    onUpdate({ ...data, habits: newHabits });
-  };
-
-  const addClass = (day: DayOfWeek) => {
-    setModal({
-      isOpen: true,
-      title: `Add to ${day}`,
-      value: '',
-      onConfirm: (val) => {
-        if (!val.trim()) return;
-        const newClass: ClassEvent = { id: crypto.randomUUID(), name: val.trim() };
-        const newSchedule = { ...data.weeklySchedule };
-        newSchedule[day] = {
-          ...newSchedule[day],
-          classes: [...newSchedule[day].classes, newClass]
-        };
-        onUpdate({ ...data, weeklySchedule: newSchedule });
-      }
+    if (readOnly) return;
+    onUpdate({
+      ...data,
+      habits: data.habits.map((h) =>
+        h.id === habitId
+          ? { ...h, completed: { ...h.completed, [day]: !h.completed[day] } }
+          : h,
+      ),
     });
   };
 
-  const addTask = (day: DayOfWeek) => {
-    setModal({
-      isOpen: true,
-      title: `New Task for ${day}`,
-      value: '',
-      onConfirm: (val) => {
-        if (!val.trim()) return;
-        const newTask: Task = { id: crypto.randomUUID(), name: val.trim(), completed: false };
-        const newSchedule = { ...data.weeklySchedule };
-        newSchedule[day] = {
-          ...newSchedule[day],
-          tasks: [...newSchedule[day].tasks, newTask]
-        };
-        onUpdate({ ...data, weeklySchedule: newSchedule });
-      }
+  const removeHabit = (habitId: string) => {
+    if (readOnly) return;
+    onUpdate({ ...data, habits: data.habits.filter((h) => h.id !== habitId) });
+  };
+
+  // --- Classes --------------------------------------------------------------
+
+  const addClass = (day: DayOfWeek) =>
+    prompt(`Add to ${DAY_LABELS[day]}`, '', (value) => {
+      const name = value.trim();
+      if (!name) return;
+      const entry: ClassEvent = { id: newId(), name };
+      onUpdate({
+        ...data,
+        weeklySchedule: withDay(data.weeklySchedule, day, {
+          classes: [...data.weeklySchedule[day].classes, entry],
+        }),
+      });
+    });
+
+  const editClass = (day: DayOfWeek, classId: string, currentName: string) =>
+    prompt('Edit class or event', currentName, (value) => {
+      const name = value.trim();
+      if (!name || name === currentName) return;
+      onUpdate({
+        ...data,
+        weeklySchedule: withDay(data.weeklySchedule, day, {
+          classes: data.weeklySchedule[day].classes.map((c) =>
+            c.id === classId ? { ...c, name } : c,
+          ),
+        }),
+      });
+    });
+
+  const removeClass = (day: DayOfWeek, classId: string) => {
+    if (readOnly) return;
+    onUpdate({
+      ...data,
+      weeklySchedule: withDay(data.weeklySchedule, day, {
+        classes: data.weeklySchedule[day].classes.filter((c) => c.id !== classId),
+      }),
     });
   };
+
+  // --- Tasks ----------------------------------------------------------------
+
+  const addTask = (day: DayOfWeek) =>
+    prompt(`New task for ${DAY_LABELS[day]}`, '', (value) => {
+      const name = value.trim();
+      if (!name) return;
+      const task: Task = { id: newId(), name, completed: false };
+      onUpdate({
+        ...data,
+        weeklySchedule: withDay(data.weeklySchedule, day, {
+          tasks: [...data.weeklySchedule[day].tasks, task],
+        }),
+      });
+    });
+
+  const editTask = (day: DayOfWeek, taskId: string, currentName: string) =>
+    prompt('Edit task', currentName, (value) => {
+      const name = value.trim();
+      if (!name || name === currentName) return;
+      onUpdate({
+        ...data,
+        weeklySchedule: withDay(data.weeklySchedule, day, {
+          tasks: data.weeklySchedule[day].tasks.map((t) =>
+            t.id === taskId ? { ...t, name } : t,
+          ),
+        }),
+      });
+    });
 
   const toggleTask = (day: DayOfWeek, taskId: string) => {
-    const newSchedule = { ...data.weeklySchedule };
-    newSchedule[day].tasks = newSchedule[day].tasks.map(t => 
-      t.id === taskId ? { ...t, completed: !t.completed } : t
-    );
-    onUpdate({ ...data, weeklySchedule: newSchedule });
+    if (readOnly) return;
+    onUpdate({
+      ...data,
+      weeklySchedule: withDay(data.weeklySchedule, day, {
+        tasks: data.weeklySchedule[day].tasks.map((t) =>
+          t.id === taskId ? { ...t, completed: !t.completed } : t,
+        ),
+      }),
+    });
   };
 
-  const removeHabit = (id: string) => {
-    onUpdate({ ...data, habits: data.habits.filter(h => h.id !== id) });
+  const removeTask = (day: DayOfWeek, taskId: string) => {
+    if (readOnly) return;
+    onUpdate({
+      ...data,
+      weeklySchedule: withDay(data.weeklySchedule, day, {
+        tasks: data.weeklySchedule[day].tasks.filter((t) => t.id !== taskId),
+      }),
+    });
   };
 
-  const removeClass = (day: DayOfWeek, id: string) => {
-    const newSchedule = { ...data.weeklySchedule };
-    newSchedule[day].classes = newSchedule[day].classes.filter(c => c.id !== id);
-    onUpdate({ ...data, weeklySchedule: newSchedule });
-  };
-
-  const removeTask = (day: DayOfWeek, id: string) => {
-    const newSchedule = { ...data.weeklySchedule };
-    newSchedule[day].tasks = newSchedule[day].tasks.filter(t => t.id !== id);
-    onUpdate({ ...data, weeklySchedule: newSchedule });
+  const dayProps = {
+    colors: { primary: theme.primary, onPrimary, accentText },
+    isDarkMode,
+    data,
+    readOnly,
+    addClass,
+    editClass,
+    addTask,
+    editTask,
+    toggleTask,
+    removeClass,
+    removeTask,
+    dailyPercentage,
   };
 
   return (
-    <div className={`h-full w-full flex flex-col md:flex-row md:overflow-hidden overflow-y-auto font-sans transition-colors duration-300 ${isDarkMode ? 'bg-gray-900 text-gray-100' : 'bg-white text-gray-800'}`}>
-      {/* Sidebar - Desktop: Left, Mobile: Top/Collapsible (simplified for mobile) */}
-      <div className={`w-full md:w-80 border-b-2 md:border-b-0 md:border-r-2 flex flex-col h-auto md:h-full shrink-0 transition-colors duration-300 ${isDarkMode ? 'bg-gray-800/50 border-gray-700' : (colorScheme === 'pink' ? 'bg-pink-50/20 border-pink-100' : 'bg-violet-50/20 border-violet-100')}`}>
-        {/* Weekly Planner Header */}
-        <div className={`${colors.accent} text-white p-4 text-center font-bold text-lg md:text-xl uppercase tracking-widest`}>
-          {name}'s Planner
+    <div
+      className={`h-full w-full flex flex-col md:flex-row md:overflow-hidden overflow-y-auto font-sans transition-colors duration-300 ${
+        isDarkMode ? 'bg-gray-900 text-gray-100' : 'bg-white text-gray-800'
+      }`}
+    >
+      {/* Sidebar */}
+      <div
+        className={`w-full md:w-80 border-b-2 md:border-b-0 md:border-r-2 flex flex-col h-auto md:h-full shrink-0 ${
+          isDarkMode ? 'bg-gray-800/50 border-gray-700' : 'border-gray-100'
+        }`}
+        style={isDarkMode ? undefined : { backgroundColor: withAlpha(theme.primary, 0.04) }}
+      >
+        <div
+          className="p-4 text-center font-bold text-lg md:text-xl uppercase tracking-widest"
+          style={{ backgroundColor: theme.primary, color: onPrimary }}
+        >
+          {profile.displayName}'s Planner
         </div>
 
-        {/* Mobile Day Selector */}
-        <div className="md:hidden flex overflow-x-auto p-2 gap-2 bg-black/5 no-scrollbar">
-          {DAYS.map(d => (
-            <button
-              key={d}
-              onClick={() => setSelectedDay(d)}
-              className={`
-                flex-shrink-0 w-12 h-12 rounded-xl flex flex-col items-center justify-center transition-all
-                ${selectedDay === d ? colors.primary + ' text-white shadow-lg' : (isDarkMode ? 'bg-gray-800 text-gray-400' : 'bg-white text-gray-600')}
-              `}
-            >
-              <span className="text-[10px] font-black uppercase leading-none mb-1">{d}</span>
-              <span className="text-xs font-bold leading-none">{calculateDailyPercentage(d)}%</span>
-            </button>
-          ))}
-        </div>
+        {readOnly && (
+          <div
+            className={`px-4 py-2 flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest ${
+              isDarkMode ? 'bg-gray-800 text-gray-400' : 'bg-gray-100 text-gray-500'
+            }`}
+          >
+            <Eye size={13} /> View only
+          </div>
+        )}
 
-        {/* New Message Notification */}
-        <AnimatePresence>
-          {data.hasNewMessage && (
-            <motion.div 
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              className="px-4 py-3 bg-red-600 text-white flex items-center justify-between gap-3 shadow-md overflow-hidden"
-            >
-              <div className="flex items-center gap-2">
-                <Bell size={18} className="animate-bounce" />
-                <span className="text-[10px] md:text-xs font-black uppercase tracking-widest whitespace-nowrap">New ChatDesk Message!</span>
-              </div>
-              <button 
-                onClick={() => onUpdate({ ...data, hasNewMessage: false })}
-                className="p-1 bg-white text-red-600 hover:bg-red-50 rounded-lg transition-all shadow-sm active:scale-95 flex items-center justify-center"
+        {/* Mobile day selector */}
+        <div className="md:hidden flex overflow-x-auto p-2 gap-2 bg-black/5">
+          {DAYS.map((day) => {
+            const selected = selectedDay === day;
+            return (
+              <button
+                key={day}
+                onClick={() => setSelectedDay(day)}
+                style={
+                  selected
+                    ? { backgroundColor: theme.primary, color: onPrimary }
+                    : undefined
+                }
+                className={`flex-shrink-0 w-12 h-12 rounded-xl flex flex-col items-center justify-center transition-all ${
+                  selected
+                    ? 'shadow-lg'
+                    : isDarkMode
+                      ? 'bg-gray-800 text-gray-400'
+                      : 'bg-white text-gray-600'
+                }`}
               >
-                <Check size={14} strokeWidth={4} />
+                <span className="text-[10px] font-black uppercase leading-none mb-1">
+                  {day}
+                </span>
+                <span className="text-xs font-bold leading-none">
+                  {dailyPercentage(day)}%
+                </span>
               </button>
-            </motion.div>
-          )}
-        </AnimatePresence>
+            );
+          })}
+        </div>
 
-        {/* Calendar Section - Hidden on mobile to save space, or can be made collapsible */}
-        <div className={`hidden md:block p-4 border-b-2 transition-colors duration-300 ${isDarkMode ? 'border-gray-700 bg-gray-800/30' : 'border-gray-200 bg-white'}`}>
+        {/* Month calendar */}
+        <div
+          className={`hidden md:block p-4 border-b-2 ${
+            isDarkMode ? 'border-gray-700 bg-gray-800/30' : 'border-gray-200 bg-white'
+          }`}
+        >
           <div className="flex items-center justify-between mb-2">
-            <span className={`font-bold text-sm uppercase ${isDarkMode ? 'text-gray-300' : 'text-gray-900'}`}>{format(currentMonth, 'MMMM yyyy')}</span>
+            <span
+              className={`font-bold text-sm uppercase ${
+                isDarkMode ? 'text-gray-300' : 'text-gray-900'
+              }`}
+            >
+              {format(currentMonth, 'MMMM yyyy')}
+            </span>
             <div className="flex gap-1">
-              <button onClick={() => setCurrentMonth(addDays(startOfMonth(currentMonth), -1))} className={`p-1 rounded transition-colors ${isDarkMode ? 'hover:bg-gray-700 text-gray-400' : 'hover:bg-gray-200 text-gray-600'}`}><ChevronLeft size={16}/></button>
-              <button onClick={() => setCurrentMonth(addDays(endOfMonth(currentMonth), 1))} className={`p-1 rounded transition-colors ${isDarkMode ? 'hover:bg-gray-700 text-gray-400' : 'hover:bg-gray-200 text-gray-600'}`}><ChevronRight size={16}/></button>
+              <button
+                aria-label="Previous month"
+                onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
+                className={`p-1 rounded transition-colors ${
+                  isDarkMode ? 'hover:bg-gray-700 text-gray-400' : 'hover:bg-gray-200 text-gray-600'
+                }`}
+              >
+                <ChevronLeft size={16} />
+              </button>
+              <button
+                aria-label="Next month"
+                onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
+                className={`p-1 rounded transition-colors ${
+                  isDarkMode ? 'hover:bg-gray-700 text-gray-400' : 'hover:bg-gray-200 text-gray-600'
+                }`}
+              >
+                <ChevronRight size={16} />
+              </button>
             </div>
           </div>
-          <div className={`grid grid-cols-7 gap-1 text-[10px] text-center font-bold mb-1 ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>
-            {['S','M','T','W','T','F','S'].map((d, i) => <div key={i}>{d}</div>)}
+          <div
+            className={`grid grid-cols-7 gap-1 text-[10px] text-center font-bold mb-1 ${
+              isDarkMode ? 'text-gray-500' : 'text-gray-400'
+            }`}
+          >
+            {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((label, i) => (
+              <div key={i}>{label}</div>
+            ))}
           </div>
           <div className="grid grid-cols-7 gap-1">
-            {Array.from({ length: startOfMonth(currentMonth).getDay() }).map((_, i) => <div key={i} />)}
-            {calendarDays.map(day => {
-              if (!day) return <div key={Math.random()} />;
-              const hasActivity = activities.some(a => 
-                a.owner.toLowerCase() === name.toLowerCase() && 
-                isSameDay(parseISO(a.date), day)
+            {Array.from({ length: startOfMonth(currentMonth).getDay() }).map((_, i) => (
+              <div key={`pad-${i}`} />
+            ))}
+            {calendarDays.map((day) => {
+              const hasActivity = activities.some(
+                (a) => a.ownerId === profile.uid && isSameDay(parseISO(a.date), day),
               );
-              
+              const todayCell = isToday(day);
               return (
-                <div 
-                  key={day.toISOString()} 
+                <div
+                  key={day.toISOString()}
                   onClick={() => hasActivity && onActivityClick(day.toISOString())}
-                  className={`
-                    aspect-square flex flex-col items-center justify-center text-[10px] rounded-full transition-colors relative
-                    ${isToday(day) ? colors.primary + ' text-white font-bold' : (isDarkMode ? 'hover:bg-gray-700 text-gray-400' : 'hover:bg-gray-200 text-gray-600')}
-                    ${hasActivity ? 'cursor-pointer' : ''}
-                  `}
+                  style={
+                    todayCell
+                      ? { backgroundColor: theme.primary, color: onPrimary }
+                      : undefined
+                  }
+                  className={`aspect-square flex flex-col items-center justify-center text-[10px] rounded-full transition-colors relative ${
+                    todayCell
+                      ? 'font-bold'
+                      : isDarkMode
+                        ? 'hover:bg-gray-700 text-gray-400'
+                        : 'hover:bg-gray-200 text-gray-600'
+                  } ${hasActivity ? 'cursor-pointer' : ''}`}
                 >
                   {format(day, 'd')}
                   {hasActivity && (
-                    <div className={`w-1 h-1 rounded-full absolute bottom-1 ${colorScheme === 'pink' ? 'bg-pink-300' : 'bg-violet-400'} ${isToday(day) ? 'bg-white' : ''}`} />
+                    <div
+                      className="w-1 h-1 rounded-full absolute bottom-1"
+                      style={{ backgroundColor: todayCell ? onPrimary : theme.primary }}
+                    />
                   )}
                 </div>
               );
@@ -333,41 +431,127 @@ export default function TaskTracker({
           </div>
         </div>
 
-        {/* Weekly Habits Section */}
-        <div className="flex-none md:flex-1 flex flex-col">
-          <div className={`p-2 border-b flex justify-between items-center transition-colors duration-300 ${isDarkMode ? 'bg-gray-800/80 border-gray-700' : 'bg-gray-100 border-gray-200'}`}>
-            <span className={`font-bold text-xs uppercase tracking-tighter ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Weekly Habits</span>
-            <button onClick={addHabit} className={`p-1 rounded transition-colors ${colors.text} ${isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-white'}`}>
-              <Plus size={14} />
-            </button>
+        {/* Habits */}
+        <div className="flex-none md:flex-1 flex flex-col min-h-0">
+          <div
+            className={`p-2 border-b flex justify-between items-center ${
+              isDarkMode ? 'bg-gray-800/80 border-gray-700' : 'bg-gray-100 border-gray-200'
+            }`}
+          >
+            <span
+              className={`font-bold text-xs uppercase tracking-tighter ${
+                isDarkMode ? 'text-gray-400' : 'text-gray-600'
+              }`}
+            >
+              Weekly habits
+            </span>
+            {!readOnly && (
+              <button
+                onClick={addHabit}
+                aria-label="Add habit"
+                style={{ color: accentText }}
+                className={`p-1 rounded transition-colors ${
+                  isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-white'
+                }`}
+              >
+                <Plus size={14} />
+              </button>
+            )}
           </div>
-          <div className="overflow-x-auto md:overflow-x-visible md:flex-1 md:overflow-y-auto">
+          <div className="overflow-x-auto md:flex-1 md:overflow-y-auto">
             <table className="w-full text-[10px] min-w-[280px]">
-              <thead className={`sticky top-0 shadow-sm z-10 transition-colors duration-300 ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+              <thead
+                className={`sticky top-0 shadow-sm z-10 ${
+                  isDarkMode ? 'bg-gray-800' : 'bg-white'
+                }`}
+              >
                 <tr className={`border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-200'}`}>
-                  <th className={`p-1 text-left ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>Habit</th>
-                  {['M','T','W','T','F','S','S'].map((d, i) => (
-                    <th key={i} className={`p-1 text-center w-6 ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>{d}</th>
+                  <th className={`p-1 text-left ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                    Habit
+                  </th>
+                  {DAYS.map((day) => (
+                    <th
+                      key={day}
+                      title={DAY_LABELS[day]}
+                      className={`p-1 text-center w-6 ${
+                        isDarkMode ? 'text-gray-500' : 'text-gray-400'
+                      }`}
+                    >
+                      {day.charAt(0)}
+                    </th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {data.habits.map(habit => (
-                  <tr key={habit.id} className={`border-b group transition-colors duration-300 ${isDarkMode ? 'border-gray-800 hover:bg-gray-800/30' : 'border-gray-100 hover:bg-gray-50'}`}>
-                    <td className="p-1 flex items-start gap-1">
-                      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-0.5">
-                        <button onClick={() => editHabit(habit.id, habit.name)} className="text-blue-400 hover:text-blue-500"><Pencil size={10}/></button>
-                        <button onClick={() => removeHabit(habit.id)} className="text-red-400 hover:text-red-500"><Trash2 size={10}/></button>
-                      </div>
-                      <span className={`break-words whitespace-normal leading-tight ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>{habit.name}</span>
+                {data.habits.length === 0 && (
+                  <tr>
+                    <td colSpan={DAYS.length + 1} className="p-3">
+                      <p className={`text-[10px] italic ${mutedText(isDarkMode)}`}>
+                        {readOnly ? 'No habits yet.' : 'No habits yet. Add one above.'}
+                      </p>
                     </td>
-                    {DAYS.map(day => (
-                      <td key={day} className="p-1 text-center">
-                        <button 
-                          onClick={() => toggleHabit(habit.id, day)}
-                          className={`w-4 h-4 rounded border transition-colors ${habit.completed[day] ? colors.primary : (isDarkMode ? 'border-gray-600' : 'border-gray-300')} flex items-center justify-center`}
+                  </tr>
+                )}
+                {data.habits.map((habit) => (
+                  <tr
+                    key={habit.id}
+                    className={`border-b group ${
+                      isDarkMode
+                        ? 'border-gray-800 hover:bg-gray-800/30'
+                        : 'border-gray-100 hover:bg-gray-50'
+                    }`}
+                  >
+                    <td className="p-1">
+                      <div className="flex items-start gap-1">
+                        {!readOnly && (
+                          <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-0.5">
+                            <button
+                              onClick={() => editHabit(habit.id, habit.name)}
+                              aria-label={`Edit ${habit.name}`}
+                              className="text-blue-400 hover:text-blue-500"
+                            >
+                              <Pencil size={10} />
+                            </button>
+                            <button
+                              onClick={() => removeHabit(habit.id)}
+                              aria-label={`Delete ${habit.name}`}
+                              className="text-red-400 hover:text-red-500"
+                            >
+                              <Trash2 size={10} />
+                            </button>
+                          </div>
+                        )}
+                        <span
+                          className={`break-words leading-tight ${
+                            isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                          }`}
                         >
-                          {habit.completed[day] && <div className="w-2 h-2 bg-white rounded-full" />}
+                          {habit.name}
+                        </span>
+                      </div>
+                    </td>
+                    {DAYS.map((day) => (
+                      <td key={day} className="p-1 text-center">
+                        <button
+                          onClick={() => toggleHabit(habit.id, day)}
+                          disabled={readOnly}
+                          aria-label={`${habit.name} on ${DAY_LABELS[day]}`}
+                          style={
+                            habit.completed[day]
+                              ? { backgroundColor: theme.primary, borderColor: theme.primary }
+                              : undefined
+                          }
+                          className={`w-4 h-4 rounded border transition-colors flex items-center justify-center mx-auto ${
+                            habit.completed[day]
+                              ? ''
+                              : isDarkMode
+                                ? 'border-gray-600'
+                                : 'border-gray-300'
+                          } ${readOnly ? 'cursor-default' : ''}`}
+                        >
+                          {habit.completed[day] && (
+                            <Check size={10} strokeWidth={4} color={onPrimary} />
+                          )}
                         </button>
                       </td>
                     ))}
@@ -378,125 +562,117 @@ export default function TaskTracker({
           </div>
         </div>
 
-        {/* Weekly Progress Section - Desktop only in sidebar */}
-        <div className={`hidden md:block p-4 border-t-2 transition-colors duration-300 ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
+        {/* Weekly progress */}
+        <div
+          className={`hidden md:block p-4 border-t-2 ${
+            isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
+          }`}
+        >
           <div className="flex justify-between items-center mb-2">
-            <span className={`text-xs font-bold uppercase ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Weekly Progress</span>
-            <span className={`text-xs font-bold ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>{calculateWeeklyPercentage()}%</span>
+            <span
+              className={`text-xs font-bold uppercase ${
+                isDarkMode ? 'text-gray-400' : 'text-gray-600'
+              }`}
+            >
+              Weekly progress
+            </span>
+            <span className={`text-xs font-bold ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+              {weeklyPercentage()}%
+            </span>
           </div>
-          <div className={`w-full h-3 rounded-full overflow-hidden ${isDarkMode ? 'bg-gray-700' : 'bg-gray-200'}`}>
-            <motion.div 
+          <div
+            className={`w-full h-3 rounded-full overflow-hidden ${
+              isDarkMode ? 'bg-gray-700' : 'bg-gray-200'
+            }`}
+          >
+            <motion.div
               initial={{ width: 0 }}
-              animate={{ width: `${calculateWeeklyPercentage()}%` }}
-              className={`h-full ${colors.primary}`}
+              animate={{ width: `${weeklyPercentage()}%` }}
+              style={{ backgroundColor: theme.primary }}
+              className="h-full"
             />
           </div>
         </div>
       </div>
 
-      {/* Right Content Area - Desktop: Days Grid, Mobile: Selected Day View */}
+      {/* Day columns */}
       <div className="flex-none md:flex-1 md:overflow-y-auto pb-24 md:pb-0">
-        {/* Desktop View: 7-column grid */}
-        <div className={`hidden md:grid grid-cols-7 h-full transition-colors duration-300 ${isDarkMode ? 'bg-gray-900' : 'bg-white'}`}>
+        <div className={`hidden md:grid grid-cols-7 h-full ${isDarkMode ? 'bg-gray-900' : 'bg-white'}`}>
           {DAYS.map((day, index) => (
-            <DayColumn 
-              key={day} 
-              day={day} 
-              index={index} 
-              colors={colors} 
-              isDarkMode={isDarkMode} 
-              data={data}
-              addClass={addClass}
-              editClass={editClass}
-              addTask={addTask}
-              editTask={editTask}
-              toggleTask={toggleTask}
-              removeClass={removeClass}
-              removeTask={removeTask}
-              calculateDailyPercentage={calculateDailyPercentage}
-            />
+            <DayColumn key={day} day={day} isLast={index === DAYS.length - 1} {...dayProps} />
           ))}
         </div>
-
-        {/* Mobile View: Single Day View */}
         <div className="md:hidden h-full">
-          <DayColumn 
-            day={selectedDay} 
-            index={0} 
-            colors={colors} 
-            isDarkMode={isDarkMode} 
-            data={data}
-            addClass={addClass}
-            editClass={editClass}
-            addTask={addTask}
-            editTask={editTask}
-            toggleTask={toggleTask}
-            removeClass={removeClass}
-            removeTask={removeTask}
-            calculateDailyPercentage={calculateDailyPercentage}
-            isMobile
-          />
+          <DayColumn day={selectedDay} isLast isMobile {...dayProps} />
         </div>
       </div>
 
-      {/* Input Modal */}
+      {/* Text input modal */}
       <AnimatePresence>
         {modal.isOpen && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              onClick={() => setModal({ ...modal, isOpen: false })}
+              onClick={() => setModal((m) => ({ ...m, isOpen: false }))}
               className="absolute inset-0 bg-black/60 backdrop-blur-sm"
             />
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, scale: 0.9, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className={`relative w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden transition-colors duration-300 ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}
+              className={`relative w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden ${
+                isDarkMode ? 'bg-gray-800' : 'bg-white'
+              }`}
             >
-              <div className={`${colors.accent} p-4 text-white text-center font-bold uppercase tracking-widest`}>
+              <div
+                className="p-4 text-center font-bold uppercase tracking-widest"
+                style={{ backgroundColor: theme.primary, color: onPrimary }}
+              >
                 {modal.title}
               </div>
               <div className="p-6">
-                <input 
+                <input
                   autoFocus
                   type="text"
                   value={modal.value}
-                  onChange={(e) => setModal({ ...modal, value: e.target.value })}
+                  onChange={(e) => setModal((m) => ({ ...m, value: e.target.value }))}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
                       modal.onConfirm(modal.value);
-                      setModal({ ...modal, isOpen: false });
+                      setModal((m) => ({ ...m, isOpen: false }));
                     } else if (e.key === 'Escape') {
-                      setModal({ ...modal, isOpen: false });
+                      setModal((m) => ({ ...m, isOpen: false }));
                     }
                   }}
-                  className={`w-full p-3 rounded-xl border-2 outline-none transition-all mb-6 ${
-                    isDarkMode 
-                      ? `bg-gray-900 border-gray-700 text-white focus:border-${colorScheme === 'pink' ? 'pink-300' : 'violet-400'}` 
-                      : `bg-gray-50 border-gray-100 text-gray-800 focus:border-${colorScheme === 'pink' ? 'pink-300' : 'violet-400'}`
+                  className={`w-full p-3 rounded-xl border-2 outline-none mb-6 ${
+                    isDarkMode
+                      ? 'bg-gray-900 border-gray-700 text-white'
+                      : 'bg-gray-50 border-gray-100 text-gray-800'
                   }`}
                   placeholder="Type something..."
                 />
                 <div className="flex gap-3">
-                  <button 
-                    onClick={() => setModal({ ...modal, isOpen: false })}
+                  <button
+                    onClick={() => setModal((m) => ({ ...m, isOpen: false }))}
                     className={`flex-1 py-3 rounded-xl font-bold text-sm uppercase tracking-wider transition-colors ${
-                      isDarkMode ? 'bg-gray-700 text-gray-400 hover:bg-gray-600' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                      isDarkMode
+                        ? 'bg-gray-700 text-gray-400 hover:bg-gray-600'
+                        : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
                     }`}
                   >
                     Cancel
                   </button>
-                  <button 
+                  <button
                     onClick={() => {
                       modal.onConfirm(modal.value);
-                      setModal({ ...modal, isOpen: false });
+                      setModal((m) => ({ ...m, isOpen: false }));
                     }}
-                    className={`flex-1 py-3 rounded-xl font-bold text-sm uppercase tracking-wider text-white shadow-lg transition-transform active:scale-95 ${colors.primary}`}
+                    style={{ backgroundColor: theme.primary, color: onPrimary }}
+                    className="flex-1 py-3 rounded-xl font-bold text-sm uppercase tracking-wider shadow-lg transition-transform active:scale-95"
                   >
-                    Enter
+                    Save
                   </button>
                 </div>
               </div>
@@ -508,27 +684,14 @@ export default function TaskTracker({
   );
 }
 
-function DayColumn({ 
-  day, 
-  index, 
-  colors, 
-  isDarkMode, 
-  data, 
-  addClass, 
-  editClass,
-  addTask, 
-  editTask,
-  toggleTask, 
-  removeClass, 
-  removeTask, 
-  calculateDailyPercentage,
-  isMobile = false
-}: {
+interface DayColumnProps {
   day: DayOfWeek;
-  index: number;
-  colors: any;
+  isLast: boolean;
+  isMobile?: boolean;
+  colors: { primary: string; onPrimary: string; accentText: string };
   isDarkMode: boolean;
-  data: UserData;
+  data: TrackerData;
+  readOnly: boolean;
   addClass: (day: DayOfWeek) => void;
   editClass: (day: DayOfWeek, id: string, name: string) => void;
   addTask: (day: DayOfWeek) => void;
@@ -536,87 +699,216 @@ function DayColumn({
   toggleTask: (day: DayOfWeek, id: string) => void;
   removeClass: (day: DayOfWeek, id: string) => void;
   removeTask: (day: DayOfWeek, id: string) => void;
-  calculateDailyPercentage: (day: DayOfWeek) => number;
-  isMobile?: boolean;
-}) {
+  dailyPercentage: (day: DayOfWeek) => number;
+}
+
+function DayColumn({
+  day,
+  isLast,
+  isMobile = false,
+  colors,
+  isDarkMode,
+  data,
+  readOnly,
+  addClass,
+  editClass,
+  addTask,
+  editTask,
+  toggleTask,
+  removeClass,
+  removeTask,
+  dailyPercentage,
+}: DayColumnProps) {
+  const dayData = data.weeklySchedule[day];
+  const isWeekend = day === 'Sat' || day === 'Sun';
+  const sectionStyle = { backgroundColor: withAlpha(colors.primary, isDarkMode ? 0.15 : 0.1) };
+
   return (
-    <div className={`flex flex-col border-r transition-colors duration-300 ${isDarkMode ? 'border-gray-800' : 'border-gray-200'} ${index === 6 ? 'border-r-0' : ''} ${isMobile ? 'border-r-0 h-full' : ''}`}>
-      {/* Day Header */}
-      <div className={`${colors.accent} text-white p-2 text-center font-bold text-xs uppercase border-b border-white/20`}>
-        {day === 'Mon' ? 'Monday' : day === 'Tue' ? 'Tuesday' : day === 'Wed' ? 'Wednesday' : day === 'Thu' ? 'Thursday' : day === 'Fri' ? 'Friday' : day === 'Sat' ? 'Saturday' : 'Sunday'}
+    <div
+      className={`flex flex-col border-r ${isDarkMode ? 'border-gray-800' : 'border-gray-200'} ${
+        isLast ? 'border-r-0' : ''
+      } ${isMobile ? 'h-full' : ''}`}
+    >
+      <div
+        className="p-2 text-center font-bold text-xs uppercase border-b border-white/20"
+        style={{ backgroundColor: colors.primary, color: colors.onPrimary }}
+      >
+        {DAY_LABELS[day]}
       </div>
 
-      {/* Classes Section */}
-      <div className={`${colors.secondary} p-1 text-[10px] md:text-[10px] font-bold text-center border-b flex justify-between items-center px-2 transition-colors duration-300 ${isDarkMode ? 'border-gray-700 text-gray-300' : 'border-gray-200 text-gray-700'}`}>
-        <span className="uppercase tracking-widest">{(day === 'Sat' || day === 'Sun') ? 'Events' : 'Classes'}</span>
-        <button onClick={() => addClass(day)} className={`rounded p-1 transition-colors ${isDarkMode ? 'hover:bg-white/10' : 'hover:bg-white/50'}`}><Plus size={14}/></button>
+      {/* Classes */}
+      <div
+        className={`p-1 text-[10px] font-bold border-b flex justify-between items-center px-2 ${
+          isDarkMode ? 'border-gray-700 text-gray-300' : 'border-gray-200 text-gray-700'
+        }`}
+        style={sectionStyle}
+      >
+        <span className="uppercase tracking-widest">{isWeekend ? 'Events' : 'Classes'}</span>
+        {!readOnly && (
+          <button
+            onClick={() => addClass(day)}
+            aria-label={`Add class to ${DAY_LABELS[day]}`}
+            className={`rounded p-1 transition-colors ${
+              isDarkMode ? 'hover:bg-white/10' : 'hover:bg-white/50'
+            }`}
+          >
+            <Plus size={14} />
+          </button>
+        )}
       </div>
-      <div className={`${isMobile ? 'min-h-[100px]' : 'h-40 overflow-y-auto'} p-2 border-b-2 transition-colors duration-300 ${isDarkMode ? 'border-gray-800 bg-gray-900/50' : 'border-gray-200 bg-white'}`}>
-        <AnimatePresence>
-          {data.weeklySchedule[day].classes.map(c => (
-            <motion.div 
-              key={c.id}
+      <div
+        className={`${isMobile ? 'min-h-[100px]' : 'h-40 overflow-y-auto'} p-2 border-b-2 ${
+          isDarkMode ? 'border-gray-800 bg-gray-900/50' : 'border-gray-200 bg-white'
+        }`}
+      >
+        <AnimatePresence initial={false}>
+          {dayData.classes.map((entry) => (
+            <motion.div
+              key={entry.id}
               initial={{ opacity: 0, x: -10 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, scale: 0.9 }}
-              className={`text-[12px] md:text-[11px] mb-1 p-2 md:p-1 rounded border flex justify-between items-start gap-2 group transition-colors duration-300 ${isDarkMode ? 'bg-gray-800 border-gray-700 text-gray-300' : 'bg-white border-gray-100 text-gray-700'}`}
+              className={`text-[12px] md:text-[11px] mb-1 p-2 md:p-1 rounded border flex justify-between items-start gap-2 group ${
+                isDarkMode
+                  ? 'bg-gray-800 border-gray-700 text-gray-300'
+                  : 'bg-white border-gray-100 text-gray-700'
+              }`}
             >
-              <span className="break-words whitespace-normal flex-1 leading-tight">{c.name}</span>
-              <div className="flex items-center gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity shrink-0 mt-0.5">
-                <button onClick={() => editClass(day, c.id, c.name)} className="text-blue-400 hover:text-blue-500 p-1"><Pencil size={12}/></button>
-                <button onClick={() => removeClass(day, c.id)} className="text-red-400 hover:text-red-500 p-1"><Trash2 size={12}/></button>
-              </div>
+              <span className="break-words flex-1 leading-tight">{entry.name}</span>
+              {!readOnly && (
+                <div className="flex items-center gap-1 md:opacity-0 md:group-hover:opacity-100 transition-opacity shrink-0">
+                  <button
+                    onClick={() => editClass(day, entry.id, entry.name)}
+                    aria-label={`Edit ${entry.name}`}
+                    className="text-blue-400 hover:text-blue-500 p-1"
+                  >
+                    <Pencil size={12} />
+                  </button>
+                  <button
+                    onClick={() => removeClass(day, entry.id)}
+                    aria-label={`Delete ${entry.name}`}
+                    className="text-red-400 hover:text-red-500 p-1"
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                </div>
+              )}
             </motion.div>
           ))}
         </AnimatePresence>
       </div>
 
-      {/* Tasks Section */}
-      <div className={`${colors.secondary} p-1 text-[10px] md:text-[10px] font-bold text-center border-b flex justify-between items-center px-2 transition-colors duration-300 ${isDarkMode ? 'border-gray-700 text-gray-300' : 'border-gray-200 text-gray-700'}`}>
+      {/* Tasks */}
+      <div
+        className={`p-1 text-[10px] font-bold border-b flex justify-between items-center px-2 ${
+          isDarkMode ? 'border-gray-700 text-gray-300' : 'border-gray-200 text-gray-700'
+        }`}
+        style={sectionStyle}
+      >
         <span className="uppercase tracking-widest">Tasks</span>
-        <button onClick={() => addTask(day)} className={`rounded p-1 transition-colors ${isDarkMode ? 'hover:bg-white/10' : 'hover:bg-white/50'}`}><Plus size={14}/></button>
+        {!readOnly && (
+          <button
+            onClick={() => addTask(day)}
+            aria-label={`Add task to ${DAY_LABELS[day]}`}
+            className={`rounded p-1 transition-colors ${
+              isDarkMode ? 'hover:bg-white/10' : 'hover:bg-white/50'
+            }`}
+          >
+            <Plus size={14} />
+          </button>
+        )}
       </div>
-      <div className={`flex-none md:flex-1 md:overflow-y-auto p-2 transition-colors duration-300 ${isDarkMode ? 'bg-gray-900' : 'bg-white'}`}>
-        <AnimatePresence>
-          {data.weeklySchedule[day].tasks.map(t => (
-            <motion.div 
-              key={t.id}
+      <div
+        className={`flex-none md:flex-1 md:overflow-y-auto p-2 ${
+          isDarkMode ? 'bg-gray-900' : 'bg-white'
+        }`}
+      >
+        <AnimatePresence initial={false}>
+          {dayData.tasks.map((task) => (
+            <motion.div
+              key={task.id}
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, x: 10 }}
               className="flex items-start gap-2 mb-3 md:mb-2 group"
             >
-              <button 
-                onClick={() => toggleTask(day, t.id)}
-                className={`mt-0.5 flex-shrink-0 transition-colors ${t.completed ? colors.text : (isDarkMode ? 'text-gray-600' : 'text-gray-300')}`}
+              <button
+                onClick={() => toggleTask(day, task.id)}
+                disabled={readOnly}
+                aria-label={task.name}
+                style={task.completed ? { color: colors.accentText } : undefined}
+                className={`mt-0.5 flex-shrink-0 transition-colors ${
+                  task.completed ? '' : isDarkMode ? 'text-gray-600' : 'text-gray-300'
+                } ${readOnly ? 'cursor-default' : ''}`}
               >
-                {t.completed ? <CheckSquare size={18} className="md:w-3.5 md:h-3.5" /> : <Square size={18} className="md:w-3.5 md:h-3.5" />}
+                {task.completed ? (
+                  <CheckSquare size={18} className="md:w-3.5 md:h-3.5" />
+                ) : (
+                  <Square size={18} className="md:w-3.5 md:h-3.5" />
+                )}
               </button>
               <div className="flex-1 min-w-0">
-                <p className={`text-sm md:text-[11px] leading-tight break-words whitespace-normal transition-colors ${t.completed ? 'line-through text-gray-500' : (isDarkMode ? 'text-gray-300' : 'text-gray-700')}`}>
-                  {t.name}
+                <p
+                  className={`text-sm md:text-[11px] leading-tight break-words ${
+                    task.completed
+                      ? 'line-through text-gray-500'
+                      : isDarkMode
+                        ? 'text-gray-300'
+                        : 'text-gray-700'
+                  }`}
+                >
+                  {task.name}
                 </p>
               </div>
-              <div className="flex items-center gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity mt-0.5">
-                <button onClick={() => editTask(day, t.id, t.name)} className="text-blue-400 hover:text-blue-500 p-1"><Pencil size={12}/></button>
-                <button onClick={() => removeTask(day, t.id)} className="text-red-400 hover:text-red-500 p-1"><Trash2 size={12}/></button>
-              </div>
+              {!readOnly && (
+                <div className="flex items-center gap-1 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                  <button
+                    onClick={() => editTask(day, task.id, task.name)}
+                    aria-label={`Edit ${task.name}`}
+                    className="text-blue-400 hover:text-blue-500 p-1"
+                  >
+                    <Pencil size={12} />
+                  </button>
+                  <button
+                    onClick={() => removeTask(day, task.id)}
+                    aria-label={`Delete ${task.name}`}
+                    className="text-red-400 hover:text-red-500 p-1"
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                </div>
+              )}
             </motion.div>
           ))}
         </AnimatePresence>
       </div>
 
-      {/* Daily Progress Bar */}
-      <div className={`p-2 border-t transition-colors duration-300 ${isDarkMode ? 'border-gray-800 bg-gray-800/30' : 'border-gray-100 bg-gray-50'}`}>
-        <div className={`flex justify-between text-[9px] font-bold mb-1 ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+      {/* Daily progress */}
+      <div
+        className={`p-2 border-t ${
+          isDarkMode ? 'border-gray-800 bg-gray-800/30' : 'border-gray-100 bg-gray-50'
+        }`}
+      >
+        <div
+          className={`flex justify-between text-[9px] font-bold mb-1 ${
+            isDarkMode ? 'text-gray-500' : 'text-gray-400'
+          }`}
+        >
           <span>DONE</span>
-          <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>{calculateDailyPercentage(day)}%</span>
+          <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>
+            {dailyPercentage(day)}%
+          </span>
         </div>
-        <div className={`w-full h-1.5 rounded-full overflow-hidden ${isDarkMode ? 'bg-gray-700' : 'bg-gray-200'}`}>
-          <motion.div 
+        <div
+          className={`w-full h-1.5 rounded-full overflow-hidden ${
+            isDarkMode ? 'bg-gray-700' : 'bg-gray-200'
+          }`}
+        >
+          <motion.div
             initial={{ width: 0 }}
-            animate={{ width: `${calculateDailyPercentage(day)}%` }}
-            className={`h-full ${colors.primary}`}
+            animate={{ width: `${dailyPercentage(day)}%` }}
+            style={{ backgroundColor: colors.primary }}
+            className="h-full"
           />
         </div>
       </div>
